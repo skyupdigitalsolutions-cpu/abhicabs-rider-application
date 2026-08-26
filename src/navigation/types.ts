@@ -23,10 +23,18 @@ export type AppStackParamList = {
 
 /** The unauthenticated stack. */
 export type AuthStackParamList = {
-  Login: undefined;
+  Welcome: undefined;
+  Register: undefined;
+  // Login can be opened with a phone pre-filled (e.g. straight after registering).
+  Login: { phone?: string } | undefined;
 };
 
-/** Per-screen prop helpers. */
+/** Per-screen prop helpers — auth. */
+export type WelcomeScreenProps = NativeStackScreenProps<AuthStackParamList, 'Welcome'>;
+export type RegisterScreenProps = NativeStackScreenProps<AuthStackParamList, 'Register'>;
+export type LoginScreenProps = NativeStackScreenProps<AuthStackParamList, 'Login'>;
+
+/** Per-screen prop helpers — app. */
 export type HomeScreenProps = NativeStackScreenProps<AppStackParamList, 'Home'>;
 export type PlaceSearchScreenProps = NativeStackScreenProps<AppStackParamList, 'PlaceSearch'>;
 export type FareOptionsScreenProps = NativeStackScreenProps<AppStackParamList, 'FareOptions'>;

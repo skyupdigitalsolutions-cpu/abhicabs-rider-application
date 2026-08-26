@@ -11,6 +11,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { queryClient } from './src/query/client';
 import { useSession, initSessionBridge } from './src/store/session';
 import { connectSocket, disconnectSocket } from './src/realtime/socket';
+import { WelcomeScreen } from './src/features/auth/screens/WelcomeScreen';
+import { RegisterScreen } from './src/features/auth/screens/RegisterScreen';
 import { LoginScreen } from './src/features/auth/screens/LoginScreen';
 import { HomeScreen } from './src/features/booking/screens/HomeScreen';
 import { PlaceSearchScreen } from './src/features/booking/screens/PlaceSearchScreen';
@@ -65,8 +67,24 @@ function AuthedNavigator() {
 
 function GuestNavigator() {
   return (
-    <AuthStack.Navigator screenOptions={{ headerShown: false }}>
-      <AuthStack.Screen name="Login" component={LoginScreen} />
+    <AuthStack.Navigator
+      initialRouteName="Welcome"
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: colors.bg },
+      }}
+    >
+      <AuthStack.Screen name="Welcome" component={WelcomeScreen} />
+      <AuthStack.Screen
+        name="Register"
+        component={RegisterScreen}
+        options={{ headerShown: true, title: '', headerShadowVisible: false, headerTintColor: colors.text }}
+      />
+      <AuthStack.Screen
+        name="Login"
+        component={LoginScreen}
+        options={{ headerShown: true, title: '', headerShadowVisible: false, headerTintColor: colors.text }}
+      />
     </AuthStack.Navigator>
   );
 }

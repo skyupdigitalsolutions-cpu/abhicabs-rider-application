@@ -24,6 +24,7 @@ import {
 } from 'react-native';
 import { useRequestOtp, useVerifyOtp } from '../api';
 import { AbhiApiError } from '../../../types/api';
+import type { LoginScreenProps } from '../../../navigation/types';
 import { colors, radius, spacing, type } from '../../../theme';
 
 const RESEND_COOLDOWN_SECONDS = 60; // mirrors backend OTP_RESEND_COOLDOWN
@@ -47,9 +48,12 @@ function errorMessage(err: unknown): string {
   return 'Something went wrong. Please try again.';
 }
 
-export function LoginScreen() {
+export function LoginScreen({ route, navigation }: LoginScreenProps) {
+  // If we arrived here straight from registration, the phone is passed in and
+  // pre-filled so the user only has to tap "Send code".
+  const prefillPhone = route.params?.phone ?? '';
   const [step, setStep] = useState<'phone' | 'code'>('phone');
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState(prefillPhone);
   const [code, setCode] = useState('');
   const [cooldown, setCooldown] = useState(0);
   const cooldownTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -130,6 +134,13 @@ export function LoginScreen() {
             loading={requestOtp.isPending}
             onPress={onSendCode}
           />
+
+          <View style={styles.signupRow}>
+            <Text style={styles.signupMuted}>New to AbhiCabs?</Text>
+            <Pressable onPress={() => navigation.navigate('Register')} hitSlop={8}>
+              <Text style={styles.signupLink}>Create an account</Text>
+            </Pressable>
+          </View>
         </View>
       ) : (
         <View style={styles.form}>
@@ -243,4 +254,7 @@ const styles = StyleSheet.create({
   resend: { ...type.label, color: colors.primary },
   resendDisabled: { color: colors.textMuted },
   changeNumber: { ...type.label, color: colors.textMuted },
+  signupRow: { flexDirection: 'row', justifyContent: 'center', gap: spacing.xs, marginTop: spacing.lg },
+  signupMuted: { ...type.body, color: colors.textMuted },
+  signupLink: { ...type.body, color: colors.primary, fontWeight: '700' },
 });
