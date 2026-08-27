@@ -36,6 +36,7 @@ export type BookingStatus =
   | 'ALLOCATED'
   | 'EN_ROUTE'
   | 'ONGOING'
+  | 'ARRIVED'
   | 'COMPLETED'
   | 'CANCELLED'
   | 'EXPIRED';
@@ -55,6 +56,7 @@ export const IN_MOTION_STATUSES: readonly BookingStatus[] = [
   'ALLOCATED',
   'EN_ROUTE',
   'ONGOING',
+  'ARRIVED',
 ];
 
 /** Statuses that are terminal — no further transitions, stop watching the room. */

@@ -129,4 +129,13 @@ export const paymentApi = {
     ),
 
   get: (id: string) => http.get<{ payment: Payment }>(`/payments/${id}`),
+
+  // DEV ONLY (mock gateway): drive a signed "captured" webhook through the real
+  // ingest pipeline so the payment settles exactly as a live gateway callback
+  // would. Deterministic on eventId, so a retry is a safe replay.
+  simulateWebhook: (paymentId: string, eventId: string) =>
+    http.post<{ changed: boolean }>(
+      `/payments/${paymentId}/simulate-webhook`,
+      { eventId, status: 'captured' },
+    ),
 };

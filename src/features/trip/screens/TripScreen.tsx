@@ -17,7 +17,7 @@ import { useMemo, useState } from 'react';
 import {
   ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
-import { useTripSummary, useCancelTrip } from '../api';
+import { useTripSummary, useCancelTrip, usePayTrip } from '../api';
 import { isTerminal } from '../../../types/domain';
 import type { TripScreenProps } from '../../../navigation/types';
 import type { BookingStatus, BookingSummary } from '../../../types/domain';
@@ -30,19 +30,22 @@ const TIMELINE: { key: BookingStatus; label: string; caption: string }[] = [
   { key: 'ALLOCATED', label: 'Driver assigned', caption: 'A driver is on the way to you' },
   { key: 'EN_ROUTE', label: 'Arriving', caption: 'Driver heading to pickup' },
   { key: 'ONGOING', label: 'On trip', caption: 'Enjoy your ride' },
+  { key: 'ARRIVED', label: 'Arrived', caption: 'Reached destination — please pay' },
   { key: 'COMPLETED', label: 'Completed', caption: 'Trip finished' },
 ];
 
 const ORDER: Record<BookingStatus, number> = {
   ATTEMPTED: -1, PENDING: 0, CONFIRMED: 1, ALLOCATED: 2, EN_ROUTE: 3,
-  ONGOING: 4, COMPLETED: 5, CANCELLED: 99, EXPIRED: 99,
+  ONGOING: 4, ARRIVED: 5, COMPLETED: 6, CANCELLED: 99, EXPIRED: 99,
 };
 
 export function TripScreen({ route, navigation }: TripScreenProps) {
   const { bookingId } = route.params;
   const { data, isLoading, isError, refetch } = useTripSummary(bookingId);
   const cancel = useCancelTrip(bookingId);
+  const pay = usePayTrip(bookingId);
   const [cancelling, setCancelling] = useState(false);
+  const [paying, setPaying] = useState(false);
 
   if (isLoading && !data) {
     return (
@@ -66,6 +69,24 @@ export function TripScreen({ route, navigation }: TripScreenProps) {
   const status = data.booking.status;
   const terminal = isTerminal(status);
   const canCancel = ['PENDING', 'CONFIRMED', 'ALLOCATED'].includes(status);
+
+  // Outstanding balance and whether the rider is being asked to pay right now.
+  const balanceDue = Number(data.booking.balanceDue ?? 0);
+  const isPaid = data.payments.some(
+    (p) => p.status === 'CAPTURED' || p.status === 'PARTIALLY_PAID',
+  );
+  const awaitingPayment = status === 'ARRIVED' && balanceDue > 0 && !isPaid;
+
+  const onPay = async () => {
+    setPaying(true);
+    try {
+      await pay.mutateAsync();
+    } catch {
+      /* surfaced below */
+    } finally {
+      setPaying(false);
+    }
+  };
 
   const onCancel = () => {
     Alert.alert('Cancel this trip?', 'You may be charged a cancellation fee depending on timing.', [
@@ -97,6 +118,38 @@ export function TripScreen({ route, navigation }: TripScreenProps) {
       {/* Driver / vehicle card once allocated */}
       {data.allocation && !terminal ? (
         <DriverCard summary={data} />
+      ) : null}
+
+      {/* Payment prompt at the ARRIVED step */}
+      {awaitingPayment ? (
+        <View style={[styles.card, styles.payCard]}>
+          <Text style={styles.payTitle}>Payment due</Text>
+          <Text style={styles.payBody}>
+            Your driver has reached the destination. Pay to finish the trip.
+          </Text>
+          <View style={styles.payAmountRow}>
+            <Text style={styles.payAmountLabel}>Amount</Text>
+            <Text style={styles.payAmount}>₹{balanceDue.toFixed(2)}</Text>
+          </View>
+          <Pressable style={styles.payBtn} onPress={onPay} disabled={paying}>
+            {paying ? (
+              <ActivityIndicator color={colors.primaryText} />
+            ) : (
+              <Text style={styles.payBtnText}>Pay ₹{balanceDue.toFixed(2)}</Text>
+            )}
+          </Pressable>
+          {pay.isError ? (
+            <Text style={styles.errText}>Payment failed. Please try again.</Text>
+          ) : null}
+        </View>
+      ) : null}
+
+      {/* Waiting-to-finish note: paid, at destination, not yet completed */}
+      {status === 'ARRIVED' && !awaitingPayment ? (
+        <View style={[styles.card, { alignItems: 'center' }]}>
+          <Text style={styles.payTitle}>Payment received</Text>
+          <Text style={styles.payBody}>Finishing your trip…</Text>
+        </View>
       ) : null}
 
       {/* Route */}
@@ -146,7 +199,7 @@ export function TripScreen({ route, navigation }: TripScreenProps) {
 /* -------------------------------- Subviews --------------------------------- */
 
 function StatusPill({ status }: { status: BookingStatus }) {
-  const live = ['ALLOCATED', 'EN_ROUTE', 'ONGOING'].includes(status);
+  const live = ['ALLOCATED', 'EN_ROUTE', 'ONGOING', 'ARRIVED'].includes(status);
   const bg = live ? colors.primary : status === 'CONFIRMED' ? colors.text : colors.surfaceAlt;
   const fg = live ? colors.primaryText : status === 'CONFIRMED' ? '#FFFFFF' : colors.textMuted;
   return (
@@ -257,7 +310,7 @@ function humanStatus(s: BookingStatus): string {
   const map: Record<BookingStatus, string> = {
     ATTEMPTED: 'Processing', PENDING: 'Requested', CONFIRMED: 'Confirmed',
     ALLOCATED: 'Driver assigned', EN_ROUTE: 'Arriving', ONGOING: 'On trip',
-    COMPLETED: 'Completed', CANCELLED: 'Cancelled', EXPIRED: 'Expired',
+    ARRIVED: 'Arrived', COMPLETED: 'Completed', CANCELLED: 'Cancelled', EXPIRED: 'Expired',
   };
   return map[s];
 }
@@ -329,6 +382,16 @@ const styles = StyleSheet.create({
   kvValueStrong: { ...type.title, fontSize: 18 },
 
   termBody: { ...type.body, color: colors.textMuted, textAlign: 'center' },
+
+  // payment prompt
+  payCard: { borderColor: colors.primary },
+  payTitle: { ...type.title, fontSize: 18, color: colors.text, marginBottom: spacing.xs },
+  payBody: { ...type.body, color: colors.textMuted, marginBottom: spacing.md },
+  payAmountRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
+  payAmountLabel: { ...type.body, color: colors.textMuted },
+  payAmount: { ...type.title, fontSize: 22, color: colors.text },
+  payBtn: { backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: spacing.lg, alignItems: 'center' },
+  payBtnText: { ...type.label, color: colors.primaryText, fontSize: 16 },
 
   cancelBtn: {
     borderWidth: 1, borderColor: colors.danger, borderRadius: radius.md,

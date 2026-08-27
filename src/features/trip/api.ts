@@ -11,7 +11,7 @@
 
 import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { bookingApi } from '../../api/endpoints';
+import { bookingApi, paymentApi } from '../../api/endpoints';
 import { qk } from '../../query/client';
 import { watchBooking, unwatchBooking } from '../../realtime/socket';
 import { newIdempotencyKey } from '../../lib/idempotency';
@@ -51,6 +51,35 @@ export function useCancelTrip(bookingId: string) {
   return useMutation({
     mutationFn: (reason?: string) =>
       bookingApi.cancel(bookingId, reason, newIdempotencyKey()).then((r) => r.booking),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.bookings.summary(bookingId) });
+      qc.invalidateQueries({ queryKey: qk.bookings.all });
+    },
+  });
+}
+
+/**
+ * Pay the outstanding balance at the ARRIVED step.
+ *
+ * Two calls, one tap:
+ *   1. create (or reuse) a BALANCE order for this booking
+ *   2. settle it — against the MOCK gateway we drive a signed "captured"
+ *      webhook through the real ingest pipeline, so the money path is exactly
+ *      the one a live gateway would trigger. Swap step 2 for the real gateway
+ *      checkout when live keys are wired; step 1 and the server are unchanged.
+ *
+ * On success the summary refetches: balanceDue drops to 0 and the trip can be
+ * completed. The idempotency key makes a double-tap a safe replay.
+ */
+export function usePayTrip(bookingId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { payment } = await paymentApi.createOrder(bookingId, 'BALANCE', newIdempotencyKey());
+      // Deterministic eventId → the capture is idempotent and replay-safe.
+      await paymentApi.simulateWebhook(payment.id, `evt_${payment.id}`);
+      return payment;
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: qk.bookings.summary(bookingId) });
       qc.invalidateQueries({ queryKey: qk.bookings.all });
