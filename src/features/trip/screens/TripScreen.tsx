@@ -6,11 +6,10 @@
  * so the status, driver, and live position here move in real time without this
  * screen polling or managing socket state itself.
  *
- * No map yet (react-native-maps needs a dev build; this keeps the screen working
- * in Expo Go). Instead the live trip is rendered as a status timeline plus a
- * driver card with a "live" position indicator — the information a rider needs
- * while waiting. The map drops into the header space later with zero changes to
- * this data flow.
+ * The immersive map (react-native-maps) sits at the top for live trips, showing
+ * pickup, drop, and the driver's current position. It requires a dev build, not
+ * Expo Go. Below it: the status timeline, driver card, payment prompt, route and
+ * fare. Terminal trips drop the map and show the summary layout only.
  */
 
 import { useMemo, useState } from 'react';
@@ -18,6 +17,7 @@ import {
   ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
 import { useTripSummary, useCancelTrip, usePayTrip } from '../api';
+import { TripMap } from '../components/TripMap';
 import { isTerminal } from '../../../types/domain';
 import type { TripScreenProps } from '../../../navigation/types';
 import type { BookingStatus, BookingSummary } from '../../../types/domain';
@@ -114,6 +114,23 @@ export function TripScreen({ route, navigation }: TripScreenProps) {
       ) : (
         <Timeline status={status} />
       )}
+
+      {/* Immersive map — live trips only. Shows pickup, drop, and the driver's
+          current position (once GPS pings arrive). */}
+      {!terminal &&
+      Number.isFinite(data.booking.pickupLat) &&
+      Number.isFinite(data.booking.dropLat) ? (
+        <TripMap
+          pickup={{ lat: Number(data.booking.pickupLat), lng: Number(data.booking.pickupLng) }}
+          drop={{ lat: Number(data.booking.dropLat), lng: Number(data.booking.dropLng) }}
+          driver={
+            data.liveLocation
+              ? { lat: data.liveLocation.lat, lng: data.liveLocation.lng }
+              : null
+          }
+          live
+        />
+      ) : null}
 
       {/* Driver / vehicle card once allocated */}
       {data.allocation && !terminal ? (

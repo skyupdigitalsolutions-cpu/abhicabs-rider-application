@@ -39,6 +39,15 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
+      <View style={styles.topBar}>
+        <Pressable onPress={() => navigation.navigate('Trips')} hitSlop={8}>
+          <Text style={styles.topBarLink}>Your trips</Text>
+        </Pressable>
+        <Pressable onPress={() => navigation.navigate('Profile')} hitSlop={8}>
+          <Text style={styles.topBarLink}>Account</Text>
+        </Pressable>
+      </View>
+
       <Text style={styles.greeting}>Hi {userName.split(' ')[0]}</Text>
       <Text style={styles.prompt}>Where are you headed?</Text>
 
@@ -179,6 +188,8 @@ function SavedAddresses(props: {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.xl, paddingTop: spacing.xxl, gap: spacing.lg },
+  topBar: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.lg, marginBottom: spacing.xs },
+  topBarLink: { ...type.label, color: colors.text },
   greeting: { ...type.body, color: colors.textMuted },
   prompt: { ...type.display, color: colors.text, marginBottom: spacing.sm },
 

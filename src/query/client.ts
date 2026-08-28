@@ -48,6 +48,7 @@ export const qk = {
   bookings: {
     all: ['bookings'] as const,
     list: (filters?: Record<string, unknown>) => ['bookings', 'list', filters ?? {}] as const,
+    history: ['bookings', 'history'] as const,
     detail: (id: string) => ['bookings', 'detail', id] as const,
     summary: (id: string) => ['bookings', 'summary', id] as const,
   },

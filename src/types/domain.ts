@@ -209,8 +209,8 @@ export interface CreateBookingRequest {
   cityId: number;
   vehicleClass: string;
   tripType: TripType;
-  pickup: LatLng;
-  drop: LatLng;
+  pickup: LatLng & { address?: string };
+  drop: LatLng & { address?: string };
   pickupAt: string;
   returnAt?: string;
   scheduled?: boolean;

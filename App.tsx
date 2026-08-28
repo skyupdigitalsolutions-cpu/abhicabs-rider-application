@@ -18,6 +18,8 @@ import { HomeScreen } from './src/features/booking/screens/HomeScreen';
 import { PlaceSearchScreen } from './src/features/booking/screens/PlaceSearchScreen';
 import { FareOptionsScreen } from './src/features/booking/screens/FareOptionsScreen';
 import { TripScreen } from './src/features/trip/screens/TripScreen';
+import { TripsScreen } from './src/features/trip/screens/TripsScreen';
+import { ProfileScreen } from './src/features/profile/screens/ProfileScreen';
 import type { AppStackParamList, AuthStackParamList } from './src/navigation/types';
 import { colors } from './src/theme';
 
@@ -59,7 +61,17 @@ function AuthedNavigator() {
       <AppStack.Screen
         name="Trip"
         component={TripScreen}
-        options={{ title: 'Your trip', headerBackVisible: false }}
+        options={{ title: 'Your trip', headerBackVisible: true }}
+      />
+      <AppStack.Screen
+        name="Trips"
+        component={TripsScreen}
+        options={{ title: 'Your trips' }}
+      />
+      <AppStack.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{ title: 'Account' }}
       />
     </AppStack.Navigator>
   );
