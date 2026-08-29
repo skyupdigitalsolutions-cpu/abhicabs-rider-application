@@ -117,8 +117,6 @@ export function TripMap({ pickup, drop, driver, live = false, threeD = true, hei
 
   // The main pickup→drop line: the real road route if we have it, else straight.
   const roadCoords = (routePts && routePts.length >= 2 ? routePts : [pickup, drop]).map(toCoord);
-  // A dashed connector from the driver to pickup while they're on the way.
-  const driverLeg = live && driver ? [toCoord(driver), toCoord(pickup)] : null;
 
   return (
     <View style={[styles.wrap, { height }]}>
@@ -156,17 +154,6 @@ export function TripMap({ pickup, drop, driver, live = false, threeD = true, hei
           lineCap="round"
           lineJoin="round"
         />
-
-        {/* Driver → pickup connector while en route. Dotted, muted. */}
-        {driverLeg ? (
-          <Polyline
-            coordinates={driverLeg}
-            strokeColor="#8A8A8A"
-            strokeWidth={3}
-            lineDashPattern={[2, 10]}
-            lineCap="round"
-          />
-        ) : null}
 
         {/* Pickup — filled dot with a ring */}
         <Marker coordinate={toCoord(pickup)} anchor={{ x: 0.5, y: 0.5 }} title="Pickup">
