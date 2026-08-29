@@ -81,6 +81,13 @@ export function PlaceSearchScreen({ route, navigation }: PlaceSearchScreenProps)
         ) : null}
       </View>
 
+      <Pressable
+        style={styles.mapLink}
+        onPress={() => navigation.replace('PickOnMap', { field })}
+      >
+        <Text style={styles.mapLinkText}>📍  Choose on map instead</Text>
+      </Pressable>
+
       <SearchBody
         term={term}
         debounced={debounced}
@@ -184,6 +191,13 @@ const styles = StyleSheet.create({
   },
   input: { ...type.body, color: colors.text, flex: 1, paddingVertical: spacing.lg },
   clear: { ...type.label, color: colors.primary },
+  mapLink: {
+    marginHorizontal: spacing.lg, marginTop: spacing.md,
+    paddingVertical: spacing.md, alignItems: 'center',
+    borderRadius: radius.md, borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  mapLinkText: { ...type.label, color: colors.text },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
   hint: { ...type.body, color: colors.textMuted, textAlign: 'center' },
   errorText: { ...type.body, color: colors.danger, textAlign: 'center' },

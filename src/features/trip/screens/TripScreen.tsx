@@ -116,21 +116,28 @@ export function TripScreen({ route, navigation }: TripScreenProps) {
       )}
 
       {/* Immersive map — live trips only. Shows pickup, drop, and the driver's
-          current position (once GPS pings arrive). */}
-      {!terminal &&
-      Number.isFinite(data.booking.pickupLat) &&
-      Number.isFinite(data.booking.dropLat) ? (
-        <TripMap
-          pickup={{ lat: Number(data.booking.pickupLat), lng: Number(data.booking.pickupLng) }}
-          drop={{ lat: Number(data.booking.dropLat), lng: Number(data.booking.dropLng) }}
-          driver={
-            data.liveLocation
-              ? { lat: data.liveLocation.lat, lng: data.liveLocation.lng }
-              : null
-          }
-          live
-        />
-      ) : null}
+          current position (once GPS pings arrive). Coords arrive as strings from
+          the API, so coerce before the finite check. */}
+      {(() => {
+        if (terminal) return null;
+        const pLat = Number(data.booking.pickupLat);
+        const pLng = Number(data.booking.pickupLng);
+        const dLat = Number(data.booking.dropLat);
+        const dLng = Number(data.booking.dropLng);
+        if (![pLat, pLng, dLat, dLng].every(Number.isFinite)) return null;
+        return (
+          <TripMap
+            pickup={{ lat: pLat, lng: pLng }}
+            drop={{ lat: dLat, lng: dLng }}
+            driver={
+              data.liveLocation
+                ? { lat: data.liveLocation.lat, lng: data.liveLocation.lng }
+                : null
+            }
+            live
+          />
+        );
+      })()}
 
       {/* Driver / vehicle card once allocated */}
       {data.allocation && !terminal ? (

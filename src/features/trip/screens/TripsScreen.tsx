@@ -19,7 +19,7 @@ export function TripsScreen({ navigation }: TripsScreenProps) {
     fetchNextPage, hasNextPage, isFetchingNextPage,
   } = useTripHistory();
 
-  const trips = data?.pages.flatMap((p) => p.bookings) ?? [];
+  const trips = data?.pages.flatMap((p) => p.items) ?? [];
 
   if (isLoading && !data) {
     return (

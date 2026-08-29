@@ -83,7 +83,21 @@ export const fareApi = {
     ),
 
   reverseGeocode: (lat: number, lng: number) =>
-    http.get<{ address: string }>('/fares/reverse-geocode', { query: { lat, lng } }),
+    http.get<{ location: { lat: number; lng: number; formattedAddress: string; placeId: string | null } }>(
+      '/fares/reverse-geocode',
+      { query: { lat, lng } },
+    ),
+
+  // Road route geometry (the polyline that follows streets) for drawing on a map.
+  route: (origin: { lat: number; lng: number }, destination: { lat: number; lng: number }) =>
+    http.post<{
+      route: {
+        points: { lat: number; lng: number }[];
+        distanceKm: number;
+        durationMin: number | null;
+        provider: string;
+      };
+    }>('/fares/route', { origin, destination }),
 };
 
 /* -------------------------------- Bookings --------------------------------- */
@@ -94,7 +108,10 @@ export const bookingApi = {
     http.post<{ booking: Booking }>('/bookings', input, { idempotencyKey }),
 
   list: (params?: { page?: number; limit?: number; status?: string; tripType?: string }) =>
-    http.get<{ bookings: BookingListItem[]; page: number }>('/bookings', { query: params }),
+    http.get<{
+      items: BookingListItem[];
+      pagination: { page: number; limit: number; total: number; totalPages: number; hasNext: boolean; hasPrev: boolean };
+    }>('/bookings', { query: params }),
 
   get: (id: string) => http.get<{ booking: Booking }>(`/bookings/${id}`),
 

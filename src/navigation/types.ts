@@ -15,6 +15,7 @@ export type SearchField = 'pickup' | 'drop';
 export type AppStackParamList = {
   Home: undefined;
   PlaceSearch: { field: SearchField };
+  PickOnMap: { field: SearchField };
   FareOptions: undefined;
   Trip: { bookingId: string };
   Trips: undefined;
@@ -37,6 +38,7 @@ export type LoginScreenProps = NativeStackScreenProps<AuthStackParamList, 'Login
 /** Per-screen prop helpers — app. */
 export type HomeScreenProps = NativeStackScreenProps<AppStackParamList, 'Home'>;
 export type PlaceSearchScreenProps = NativeStackScreenProps<AppStackParamList, 'PlaceSearch'>;
+export type PickOnMapScreenProps = NativeStackScreenProps<AppStackParamList, 'PickOnMap'>;
 export type FareOptionsScreenProps = NativeStackScreenProps<AppStackParamList, 'FareOptions'>;
 export type TripScreenProps = NativeStackScreenProps<AppStackParamList, 'Trip'>;
 export type TripsScreenProps = NativeStackScreenProps<AppStackParamList, 'Trips'>;

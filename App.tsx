@@ -16,6 +16,7 @@ import { RegisterScreen } from './src/features/auth/screens/RegisterScreen';
 import { LoginScreen } from './src/features/auth/screens/LoginScreen';
 import { HomeScreen } from './src/features/booking/screens/HomeScreen';
 import { PlaceSearchScreen } from './src/features/booking/screens/PlaceSearchScreen';
+import { PickOnMapScreen } from './src/features/booking/screens/PickOnMapScreen';
 import { FareOptionsScreen } from './src/features/booking/screens/FareOptionsScreen';
 import { TripScreen } from './src/features/trip/screens/TripScreen';
 import { TripsScreen } from './src/features/trip/screens/TripsScreen';
@@ -52,6 +53,11 @@ function AuthedNavigator() {
         name="PlaceSearch"
         component={PlaceSearchScreen}
         options={{ title: 'Search', presentation: 'card' }}
+      />
+      <AppStack.Screen
+        name="PickOnMap"
+        component={PickOnMapScreen}
+        options={{ title: 'Pick on map' }}
       />
       <AppStack.Screen
         name="FareOptions"
