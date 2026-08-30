@@ -66,6 +66,8 @@ function routeKey(args: {
   drop: ChosenPlace;
   pickupAt: string;
   returnAt: string | null;
+  rentalPackageId?: number | null;
+  rentalHours?: number | null;
 }): string {
   const r = (n: number) => n.toFixed(4);
   return [
@@ -73,6 +75,7 @@ function routeKey(args: {
     r(args.pickup.lat), r(args.pickup.lng),
     r(args.drop.lat), r(args.drop.lng),
     args.pickupAt, args.returnAt ?? '-',
+    args.rentalPackageId ?? '-', args.rentalHours ?? '-',
   ].join('|');
 }
 
@@ -87,10 +90,15 @@ export function useFareOptions(args: {
   drop: ChosenPlace | null;
   pickupAt: string;
   returnAt: string | null;
+  rentalPackageId?: number | null;
+  rentalHours?: number | null;
+  flightNumber?: string | null;
 }) {
   const ready = Boolean(
     args.pickup && args.drop &&
-    Number.isFinite(args.pickup.lat) && Number.isFinite(args.drop.lat),
+    Number.isFinite(args.pickup.lat) && Number.isFinite(args.drop.lat) &&
+    // HOURLY needs a package or an hours commitment before it can be quoted.
+    (args.tripType !== 'HOURLY' || args.rentalPackageId || args.rentalHours),
   );
   const key = ready
     ? routeKey({ ...args, pickup: args.pickup as ChosenPlace, drop: args.drop as ChosenPlace })
@@ -111,9 +119,21 @@ export function useFareOptions(args: {
           drop: { lat: d.lat, lng: d.lng },
           pickupAt: args.pickupAt,
           ...(args.returnAt ? { returnAt: args.returnAt } : {}),
+          ...(args.rentalPackageId ? { rentalPackageId: args.rentalPackageId } : {}),
+          ...(args.rentalHours ? { rentalHours: args.rentalHours } : {}),
+          ...(args.flightNumber ? { flightNumber: args.flightNumber } : {}),
         })
       ).options;
     },
+  });
+}
+
+/** Local-rental packages for the hourly picker, grouped by the app as needed. */
+export function useRentalPackages(cityId: number, vehicleClass?: string) {
+  return useQuery({
+    queryKey: ['rental-packages', cityId, vehicleClass ?? 'all'],
+    queryFn: async () => (await fareApi.rentalPackages(cityId, vehicleClass)).packages,
+    staleTime: 10 * 60 * 1000, // packages change rarely
   });
 }
 

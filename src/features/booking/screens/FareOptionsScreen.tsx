@@ -43,6 +43,9 @@ export function FareOptionsScreen({ navigation }: FareOptionsScreenProps) {
     drop: draft.drop,
     pickupAt: draft.pickupAt,
     returnAt: draft.returnAt,
+    rentalPackageId: draft.rentalPackageId,
+    rentalHours: draft.rentalHours,
+    flightNumber: draft.flightNumber,
   });
 
   const create = useCreateBooking();
@@ -80,10 +83,13 @@ export function FareOptionsScreen({ navigation }: FareOptionsScreenProps) {
         cityId: draft.cityId,
         vehicleClass: activeClass,
         tripType: draft.tripType,
-        pickup: { lat: draft.pickup.lat, lng: draft.pickup.lng, address: draft.pickup.label },
-        drop: { lat: draft.drop.lat, lng: draft.drop.lng, address: draft.drop.label },
+        pickup: { lat: draft.pickup.lat, lng: draft.pickup.lng },
+        drop: { lat: draft.drop.lat, lng: draft.drop.lng },
         pickupAt,
         ...(returnAt ? { returnAt } : {}),
+        ...(draft.rentalPackageId ? { rentalPackageId: draft.rentalPackageId } : {}),
+        ...(draft.rentalHours ? { rentalHours: draft.rentalHours } : {}),
+        ...(draft.flightNumber ? { flightNumber: draft.flightNumber } : {}),
         scheduled: true,
         paymentMode,
       });

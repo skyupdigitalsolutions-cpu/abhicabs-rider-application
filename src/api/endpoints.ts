@@ -17,6 +17,7 @@ import type {
   CreateBookingRequest,
   FareEstimateRequest,
   FareOption,
+  RentalPackage,
   FareQuote,
   Payment,
   SavedAddress,
@@ -67,6 +68,12 @@ export const fareApi = {
   options: (input: Omit<FareEstimateRequest, 'vehicleClass'>) =>
     http.post<{ options: FareOption[] }>('/fares/options', input),
 
+  /** Local-rental packages (4/40, 8/80, 12/120) for the hourly picker. */
+  rentalPackages: (cityId: number, vehicleClass?: string) =>
+    http.get<{ packages: RentalPackage[] }>('/fares/rental-packages', {
+      query: { cityId, ...(vehicleClass ? { vehicleClass } : {}) },
+    }),
+
   // ✅ Added optional bias param; renamed response key from predictions → suggestions
   autocomplete: (q: string, bias?: { lat: number; lng: number }) =>
     http.get<{ suggestions: Array<{ description: string; placeId: string }> }>(
@@ -83,21 +90,7 @@ export const fareApi = {
     ),
 
   reverseGeocode: (lat: number, lng: number) =>
-    http.get<{ location: { lat: number; lng: number; formattedAddress: string; placeId: string | null } }>(
-      '/fares/reverse-geocode',
-      { query: { lat, lng } },
-    ),
-
-  // Road route geometry (the polyline that follows streets) for drawing on a map.
-  route: (origin: { lat: number; lng: number }, destination: { lat: number; lng: number }) =>
-    http.post<{
-      route: {
-        points: { lat: number; lng: number }[];
-        distanceKm: number;
-        durationMin: number | null;
-        provider: string;
-      };
-    }>('/fares/route', { origin, destination }),
+    http.get<{ address: string }>('/fares/reverse-geocode', { query: { lat, lng } }),
 };
 
 /* -------------------------------- Bookings --------------------------------- */
@@ -108,10 +101,7 @@ export const bookingApi = {
     http.post<{ booking: Booking }>('/bookings', input, { idempotencyKey }),
 
   list: (params?: { page?: number; limit?: number; status?: string; tripType?: string }) =>
-    http.get<{
-      items: BookingListItem[];
-      pagination: { page: number; limit: number; total: number; totalPages: number; hasNext: boolean; hasPrev: boolean };
-    }>('/bookings', { query: params }),
+    http.get<{ bookings: BookingListItem[]; page: number }>('/bookings', { query: params }),
 
   get: (id: string) => http.get<{ booking: Booking }>(`/bookings/${id}`),
 
@@ -146,13 +136,4 @@ export const paymentApi = {
     ),
 
   get: (id: string) => http.get<{ payment: Payment }>(`/payments/${id}`),
-
-  // DEV ONLY (mock gateway): drive a signed "captured" webhook through the real
-  // ingest pipeline so the payment settles exactly as a live gateway callback
-  // would. Deterministic on eventId, so a retry is a safe replay.
-  simulateWebhook: (paymentId: string, eventId: string) =>
-    http.post<{ changed: boolean }>(
-      `/payments/${paymentId}/simulate-webhook`,
-      { eventId, status: 'captured' },
-    ),
 };

@@ -22,7 +22,27 @@ export type Role =
   | 'FLEET'
   | 'SUPPORT';
 
-export type TripType = 'ONE_WAY' | 'ROUND_TRIP';
+export type TripType = 'ONE_WAY' | 'ROUND_TRIP' | 'AIRPORT' | 'HOURLY';
+
+/**
+ * The high-level service the user is booking, matching the app's top tabs.
+ * OUTSTATION splits into ONE_WAY / ROUND_TRIP; LOCAL maps to HOURLY; AIRPORT is
+ * its own TripType. This is a UI grouping — the wire always sends a TripType.
+ */
+export type ServiceKind = 'OUTSTATION' | 'LOCAL' | 'AIRPORT';
+
+/** A fixed local-rental package (4hr/40km, 8hr/80km, 12hr/120km). */
+export interface RentalPackage {
+  id: number;
+  cityId: number;
+  vehicleClass: string;
+  label: string;
+  includedHours: number;
+  includedKm: number;
+  packageFare: string;
+  extraPerHour: string;
+  extraPerKm: string;
+}
 
 export type PaymentMode = 'ZERO' | 'PARTIAL' | 'FULL';
 
@@ -36,7 +56,6 @@ export type BookingStatus =
   | 'ALLOCATED'
   | 'EN_ROUTE'
   | 'ONGOING'
-  | 'ARRIVED'
   | 'COMPLETED'
   | 'CANCELLED'
   | 'EXPIRED';
@@ -56,7 +75,6 @@ export const IN_MOTION_STATUSES: readonly BookingStatus[] = [
   'ALLOCATED',
   'EN_ROUTE',
   'ONGOING',
-  'ARRIVED',
 ];
 
 /** Statuses that are terminal — no further transitions, stop watching the room. */
@@ -127,6 +145,11 @@ export interface FareEstimateRequest {
   drop: LatLng;
   pickupAt: string; // ISO
   returnAt?: string; // ISO, ROUND_TRIP only
+  // HOURLY: a fixed package id OR a flexible hours commitment.
+  rentalPackageId?: number | null;
+  rentalHours?: number | null;
+  // AIRPORT: optional flight number for driver flight-tracking.
+  flightNumber?: string | null;
 }
 
 /**
@@ -209,13 +232,18 @@ export interface CreateBookingRequest {
   cityId: number;
   vehicleClass: string;
   tripType: TripType;
-  pickup: LatLng & { address?: string };
-  drop: LatLng & { address?: string };
+  pickup: LatLng;
+  drop: LatLng;
   pickupAt: string;
   returnAt?: string;
   scheduled?: boolean;
   paymentMode: PaymentMode;
   specialRequests?: string;
+  // HOURLY
+  rentalPackageId?: number | null;
+  rentalHours?: number | null;
+  // AIRPORT
+  flightNumber?: string | null;
 }
 
 /* -------------------------------- Payments --------------------------------- */

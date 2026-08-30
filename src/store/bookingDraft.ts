@@ -26,12 +26,21 @@ interface BookingDraftState {
   pickupAt: string; // ISO; defaults to "soon" and is editable later
   returnAt: string | null;
 
+  // HOURLY (local rental): either a fixed package, or a flexible hours commitment.
+  rentalPackageId: number | null;
+  rentalHours: number | null;
+  // AIRPORT: optional flight number.
+  flightNumber: string | null;
+
   setPickup: (place: ChosenPlace | null) => void;
   setDrop: (place: ChosenPlace | null) => void;
   setTripType: (t: TripType) => void;
   setCity: (cityId: number) => void;
   setPickupAt: (iso: string) => void;
   setReturnAt: (iso: string | null) => void;
+  setRentalPackageId: (id: number | null) => void;
+  setRentalHours: (hours: number | null) => void;
+  setFlightNumber: (fn: string | null) => void;
   swap: () => void;
   reset: () => void;
 }
@@ -48,13 +57,30 @@ export const useBookingDraft = create<BookingDraftState>((set, get) => ({
   drop: null,
   pickupAt: defaultPickupAt(),
   returnAt: null,
+  rentalPackageId: null,
+  rentalHours: null,
+  flightNumber: null,
 
   setPickup: (place) => set({ pickup: place }),
   setDrop: (place) => set({ drop: place }),
-  setTripType: (t) => set({ tripType: t, returnAt: t === 'ONE_WAY' ? null : get().returnAt }),
+  // Switching trip type clears the fields that only make sense for the old type,
+  // so a leftover returnAt/package can't ride along into an incompatible quote.
+  setTripType: (t) =>
+    set({
+      tripType: t,
+      returnAt: t === 'ROUND_TRIP' ? get().returnAt : null,
+      rentalPackageId: t === 'HOURLY' ? get().rentalPackageId : null,
+      rentalHours: t === 'HOURLY' ? get().rentalHours : null,
+      flightNumber: t === 'AIRPORT' ? get().flightNumber : null,
+    }),
   setCity: (cityId) => set({ cityId }),
   setPickupAt: (iso) => set({ pickupAt: iso }),
   setReturnAt: (iso) => set({ returnAt: iso }),
+  // Picking a fixed package clears any flexible-hours value, and vice-versa —
+  // the backend takes one or the other, never both.
+  setRentalPackageId: (id) => set({ rentalPackageId: id, rentalHours: id ? null : get().rentalHours }),
+  setRentalHours: (hours) => set({ rentalHours: hours, rentalPackageId: hours ? null : get().rentalPackageId }),
+  setFlightNumber: (fn) => set({ flightNumber: fn }),
   swap: () => set({ pickup: get().drop, drop: get().pickup }),
   reset: () =>
     set({
@@ -64,5 +90,8 @@ export const useBookingDraft = create<BookingDraftState>((set, get) => ({
       drop: null,
       pickupAt: defaultPickupAt(),
       returnAt: null,
+      rentalPackageId: null,
+      rentalHours: null,
+      flightNumber: null,
     }),
 }));
