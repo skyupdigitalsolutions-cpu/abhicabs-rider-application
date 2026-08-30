@@ -56,6 +56,7 @@ export type BookingStatus =
   | 'ALLOCATED'
   | 'EN_ROUTE'
   | 'ONGOING'
+  | 'ARRIVED'
   | 'COMPLETED'
   | 'CANCELLED'
   | 'EXPIRED';
@@ -75,6 +76,7 @@ export const IN_MOTION_STATUSES: readonly BookingStatus[] = [
   'ALLOCATED',
   'EN_ROUTE',
   'ONGOING',
+  'ARRIVED',
 ];
 
 /** Statuses that are terminal — no further transitions, stop watching the room. */
@@ -232,8 +234,8 @@ export interface CreateBookingRequest {
   cityId: number;
   vehicleClass: string;
   tripType: TripType;
-  pickup: LatLng;
-  drop: LatLng;
+  pickup: LatLng & { address?: string };
+  drop: LatLng & { address?: string };
   pickupAt: string;
   returnAt?: string;
   scheduled?: boolean;

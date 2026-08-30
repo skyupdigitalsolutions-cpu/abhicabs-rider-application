@@ -128,7 +128,7 @@ export function useFareOptions(args: {
   });
 }
 
-/** Local-rental packages for the hourly picker, grouped by the app as needed. */
+/** Local-rental packages for the hourly picker. */
 export function useRentalPackages(cityId: number, vehicleClass?: string) {
   return useQuery({
     queryKey: ['rental-packages', cityId, vehicleClass ?? 'all'],
