@@ -45,7 +45,6 @@ export function FareOptionsScreen({ navigation }: FareOptionsScreenProps) {
     returnAt: draft.returnAt,
     rentalPackageId: draft.rentalPackageId,
     rentalHours: draft.rentalHours,
-    flightNumber: draft.flightNumber,
   });
 
   const create = useCreateBooking();
@@ -59,8 +58,11 @@ export function FareOptionsScreen({ navigation }: FareOptionsScreenProps) {
   }, [options]);
   const activeClass = selectedClass ?? cheapest;
 
+  const isHourly = draft.tripType === 'HOURLY';
+
   const onContinue = async () => {
-    if (!activeClass || !draft.pickup || !draft.drop) return;
+    // Local rentals have no drop; every other type needs one.
+    if (!activeClass || !draft.pickup || (!isHourly && !draft.drop)) return;
     setSubmitError(null);
 
     // Compute a FRESH pickup time at submit, safely above the backend's 15-min
@@ -84,12 +86,13 @@ export function FareOptionsScreen({ navigation }: FareOptionsScreenProps) {
         vehicleClass: activeClass,
         tripType: draft.tripType,
         pickup: { lat: draft.pickup.lat, lng: draft.pickup.lng, address: draft.pickup.label },
-        drop: { lat: draft.drop.lat, lng: draft.drop.lng, address: draft.drop.label },
+        ...(draft.drop
+          ? { drop: { lat: draft.drop.lat, lng: draft.drop.lng, address: draft.drop.label } }
+          : {}),
         pickupAt,
         ...(returnAt ? { returnAt } : {}),
         ...(draft.rentalPackageId ? { rentalPackageId: draft.rentalPackageId } : {}),
         ...(draft.rentalHours ? { rentalHours: draft.rentalHours } : {}),
-        ...(draft.flightNumber ? { flightNumber: draft.flightNumber } : {}),
         scheduled: true,
         paymentMode,
       });
@@ -109,7 +112,9 @@ export function FareOptionsScreen({ navigation }: FareOptionsScreenProps) {
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.heading}>Choose your ride</Text>
         <Text style={styles.sub} numberOfLines={1}>
-          {draft.pickup?.label ?? 'Pickup'} → {draft.drop?.label ?? 'Drop'}
+          {isHourly
+            ? draft.pickup?.label ?? 'Pickup'
+            : `${draft.pickup?.label ?? 'Pickup'} → ${draft.drop?.label ?? 'Drop'}`}
         </Text>
 
         {/* Fare options */}

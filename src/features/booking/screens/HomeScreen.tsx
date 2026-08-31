@@ -35,8 +35,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const userName = useSession((s) => s.user?.name ?? 'there');
   const draft = useBookingDraft();
   const {
-    cityId, pickup, drop, tripType, rentalPackageId, rentalHours, flightNumber,
-    setTripType, setPickup, swap, setRentalPackageId, setRentalHours, setFlightNumber,
+    cityId, pickup, drop, tripType, rentalPackageId, rentalHours,
+    setTripType, setPickup, swap, setRentalPackageId, setRentalHours,
   } = draft;
   const addresses = useSavedAddresses();
 
@@ -53,7 +53,12 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
   // HOURLY requires a package or hours before we can quote.
   const hourlyReady = tripType !== 'HOURLY' || Boolean(rentalPackageId || rentalHours);
-  const canContinue = Boolean(pickup && drop) && hourlyReady;
+  // Local (hourly) has no drop — pickup + a package/hours is enough. Every other
+  // service needs both pickup and drop.
+  const canContinue =
+    service === 'LOCAL'
+      ? Boolean(pickup) && hourlyReady
+      : Boolean(pickup && drop);
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
@@ -75,28 +80,33 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         />
       ) : null}
 
-      {/* Pickup / drop card */}
+      {/* Pickup / drop card. Local rentals have no destination, so only pickup. */}
       <View style={styles.routeCard}>
         <PlaceField
           kind="pickup"
-          label="Pickup"
+          label={service === 'LOCAL' ? 'From' : 'Pickup'}
           value={pickup?.label ?? null}
           placeholder="Add pickup point"
           onPress={() => navigation.navigate('PlaceSearch', { field: 'pickup' })}
         />
-        <View style={styles.divider} />
-        <PlaceField
-          kind="drop"
-          label={service === 'LOCAL' ? 'Drop (approx.)' : 'Drop'}
-          value={drop?.label ?? null}
-          placeholder={service === 'LOCAL' ? 'Roughly where to?' : 'Where to?'}
-          onPress={() => navigation.navigate('PlaceSearch', { field: 'drop' })}
-        />
 
-        {pickup && drop ? (
-          <Pressable style={styles.swapButton} onPress={swap} hitSlop={8}>
-            <Text style={styles.swapText}>Swap</Text>
-          </Pressable>
+        {service !== 'LOCAL' ? (
+          <>
+            <View style={styles.divider} />
+            <PlaceField
+              kind="drop"
+              label="Drop"
+              value={drop?.label ?? null}
+              placeholder="Where to?"
+              onPress={() => navigation.navigate('PlaceSearch', { field: 'drop' })}
+            />
+
+            {pickup && drop ? (
+              <Pressable style={styles.swapButton} onPress={swap} hitSlop={8}>
+                <Text style={styles.swapText}>Swap</Text>
+              </Pressable>
+            ) : null}
+          </>
         ) : null}
       </View>
 
@@ -109,23 +119,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           onPickPackage={setRentalPackageId}
           onPickHours={setRentalHours}
         />
-      ) : null}
-
-      {/* AIRPORT: optional flight number */}
-      {service === 'AIRPORT' ? (
-        <View style={styles.airportCard}>
-          <Text style={styles.sectionLabel}>Flight number (optional)</Text>
-          <TextInput
-            style={styles.flightInput}
-            value={flightNumber ?? ''}
-            onChangeText={(t) => setFlightNumber(t.toUpperCase() || null)}
-            placeholder="e.g. AI 505"
-            placeholderTextColor={colors.textMuted}
-            autoCapitalize="characters"
-            maxLength={16}
-          />
-          <Text style={styles.hint}>We’ll track your flight so the driver arrives on time.</Text>
-        </View>
       ) : null}
 
       {/* Saved addresses as quick pickup shortcuts */}

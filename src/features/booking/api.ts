@@ -94,14 +94,21 @@ export function useFareOptions(args: {
   rentalHours?: number | null;
   flightNumber?: string | null;
 }) {
+  const isHourly = args.tripType === 'HOURLY';
   const ready = Boolean(
-    args.pickup && args.drop &&
-    Number.isFinite(args.pickup.lat) && Number.isFinite(args.drop.lat) &&
-    // HOURLY needs a package or an hours commitment before it can be quoted.
-    (args.tripType !== 'HOURLY' || args.rentalPackageId || args.rentalHours),
+    args.pickup && Number.isFinite(args.pickup.lat) &&
+    // Non-hourly needs a drop; hourly needs a package or hours instead.
+    (isHourly
+      ? (args.rentalPackageId || args.rentalHours)
+      : (args.drop && Number.isFinite(args.drop.lat))),
   );
   const key = ready
-    ? routeKey({ ...args, pickup: args.pickup as ChosenPlace, drop: args.drop as ChosenPlace })
+    ? routeKey({
+        ...args,
+        pickup: args.pickup as ChosenPlace,
+        // Hourly has no drop — key off pickup so the cache key is stable.
+        drop: (args.drop ?? args.pickup) as ChosenPlace,
+      })
     : 'incomplete';
 
   return useQuery({
@@ -110,7 +117,9 @@ export function useFareOptions(args: {
     staleTime: 60 * 1000, // a quote is good for ~a minute
     queryFn: async () => {
       const p = args.pickup as ChosenPlace;
-      const d = args.drop as ChosenPlace;
+      // For hourly, send pickup as the drop too; the backend prices from the
+      // package and ignores the (zero) distance.
+      const d = (args.drop ?? args.pickup) as ChosenPlace;
       return (
         await fareApi.options({
           cityId: args.cityId,
@@ -121,7 +130,6 @@ export function useFareOptions(args: {
           ...(args.returnAt ? { returnAt: args.returnAt } : {}),
           ...(args.rentalPackageId ? { rentalPackageId: args.rentalPackageId } : {}),
           ...(args.rentalHours ? { rentalHours: args.rentalHours } : {}),
-          ...(args.flightNumber ? { flightNumber: args.flightNumber } : {}),
         })
       ).options;
     },
