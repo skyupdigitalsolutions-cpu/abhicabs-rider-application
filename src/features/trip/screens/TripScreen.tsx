@@ -12,7 +12,7 @@
  * fare. Terminal trips drop the map and show the summary layout only.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
@@ -176,6 +176,9 @@ export function TripScreen({ route, navigation }: TripScreenProps) {
         </View>
       ) : null}
 
+      {/* Local rental — package, included hours/km, rate, and time remaining. */}
+      {data.booking.tripType === 'HOURLY' ? <RentalCard booking={data.booking} /> : null}
+
       {/* Route */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Route</Text>
@@ -319,6 +322,95 @@ function RouteRow({ dot, label, value }: { dot: string; label: string; value: st
   );
 }
 
+/**
+ * Local-rental summary: the chosen package (or flexible hours), what's included
+ * (hours + km), the per-km rate for anything beyond the allowance, and a live
+ * countdown of time remaining once the trip has started.
+ *
+ * All the package data is read from the booking's frozen fareBasis, so it always
+ * reflects exactly what was quoted — never a later rate change.
+ */
+function RentalCard({ booking }: { booking: import('../../../types/domain').Booking }) {
+  const comp = booking.fareBasis?.components;
+  const meta = comp?.meta;
+  const snap = comp?.configSnapshot;
+
+  const includedHours = meta?.includedHours ?? booking.rentalHours ?? null;
+  const includedKm = meta?.includedKm ?? null;
+  const packageLabel =
+    meta?.packageLabel ??
+    (booking.rentalHours ? `${booking.rentalHours} hrs (flexible)` : 'Local rental');
+  // Rate charged for distance beyond the included km.
+  const extraPerKm = snap?.extraPerKm ?? snap?.perKm ?? null;
+
+  const remaining = useRentalCountdown(booking, includedHours);
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.rentalHeaderRow}>
+        <Text style={styles.cardTitle}>Local rental</Text>
+        <View style={styles.rentalBadge}>
+          <Text style={styles.rentalBadgeText}>{packageLabel}</Text>
+        </View>
+      </View>
+
+      {/* Time remaining — the headline for an in-progress rental. */}
+      {remaining ? (
+        <View style={styles.remainingWrap}>
+          <Text style={styles.remainingValue}>{remaining.label}</Text>
+          <Text style={styles.remainingCaption}>{remaining.caption}</Text>
+        </View>
+      ) : null}
+
+      {includedHours != null ? (
+        <Row label="Included time" value={`${includedHours} hours`} />
+      ) : null}
+      {includedKm != null ? <Row label="Included distance" value={`${includedKm} km`} /> : null}
+      {extraPerKm ? <Row label="Extra distance" value={`₹${extraPerKm} / km`} /> : null}
+    </View>
+  );
+}
+
+/**
+ * Live "time remaining" for a rental. Counts down from (startedAt + includedHours)
+ * once the trip is ONGOING; before start it shows the total window, after end it
+ * shows "time's up". Ticks once a minute — a rental doesn't need second precision.
+ */
+function useRentalCountdown(
+  booking: import('../../../types/domain').Booking,
+  includedHours: number | null,
+): { label: string; caption: string } | null {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30 * 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  if (includedHours == null) return null;
+
+  const windowMs = includedHours * 60 * 60 * 1000;
+
+  // Before the trip starts, just show the package window.
+  if (!booking.startedAt) {
+    return { label: `${includedHours}h`, caption: 'Package time (starts at pickup)' };
+  }
+
+  const startedMs = new Date(booking.startedAt).getTime();
+  const endMs = startedMs + windowMs;
+  const leftMs = endMs - now;
+
+  if (leftMs <= 0) {
+    return { label: 'Time’s up', caption: 'Extra time may be charged' };
+  }
+
+  const totalMin = Math.floor(leftMs / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  const label = h > 0 ? `${h}h ${m}m` : `${m}m`;
+  return { label, caption: 'Time remaining' };
+}
+
 function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
     <View style={styles.kv}>
@@ -367,6 +459,19 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg, padding: spacing.lg,
   },
   cardTitle: { ...type.label, color: colors.textMuted, marginBottom: spacing.md },
+
+  rentalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
+  rentalBadge: {
+    backgroundColor: colors.primary, borderRadius: radius.pill,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
+  },
+  rentalBadgeText: { ...type.caption, color: colors.primaryText, fontWeight: '700' },
+  remainingWrap: {
+    alignItems: 'center', paddingVertical: spacing.md, marginBottom: spacing.sm,
+    backgroundColor: colors.surfaceAlt, borderRadius: radius.md,
+  },
+  remainingValue: { ...type.display, fontSize: 32, color: colors.text },
+  remainingCaption: { ...type.caption, color: colors.textMuted, marginTop: spacing.xs },
 
   // timeline
   tlRow: { flexDirection: 'row', gap: spacing.md },

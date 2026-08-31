@@ -6,16 +6,19 @@
  *   - the ACCESS token, in memory only (never persisted — see storage.ts)
  *   - the REFRESH token, mirrored to secure storage so a cold start can restore
  *     the session without asking the user to log in again
+ *   - a cached snapshot of the last known user (persisted), so a cold start can
+ *     render the authed UI INSTANTLY without waiting on a network round-trip
  *   - the current user
  *   - a `status` the navigation tree switches on: 'loading' | 'authed' | 'guest'
  *
  * It also injects the session hooks into the API client, which is what lets the
  * client refresh tokens without importing this store (avoiding a cycle).
  *
- * The access token is deliberately NOT part of the reactive state that screens
- * subscribe to — it changes on every refresh, and re-rendering the app tree on
- * each token rotation would be wasteful. It lives in a module ref that the
- * client reads synchronously; only `user` and `status` are reactive.
+ * COLD-START NOTE: bootstrap() is optimistic. If a refresh token exists we flip
+ * straight to 'authed' using the cached user (or a placeholder) and verify with
+ * /auth/me in the BACKGROUND. Only a fatal auth error drops us to 'guest'. This
+ * removes the me() round-trip from the launch critical path — the app paints the
+ * home screen immediately instead of showing a spinner until the network answers.
  */
 
 import { create } from 'zustand';
@@ -58,27 +61,37 @@ export const useSession = create<SessionState>((set, get) => ({
       return;
     }
 
-    // We have a refresh token but no access token (cold start). Mint one, and
-    // fetch the user. The client's refresh path will rotate + persist for us.
+    // OPTIMISTIC: we have a refresh token, so assume authed and render now.
+    // Use the last cached user if we have one, so the UI is personalized
+    // immediately; otherwise a minimal placeholder until me() returns.
+    const cachedUser = await secureStore.getCachedUser().catch(() => null);
+    set({ status: 'authed', user: cachedUser ?? null });
+
+    // Verify in the BACKGROUND. The client's transparent refresh mints an access
+    // token from the stored refresh token, replays me(), and persists the
+    // rotated pair. On success we refresh the cached user; on a FATAL auth error
+    // (expired/invalid/reused refresh token) we drop to guest.
     try {
-      // A cheap authed call triggers the client's transparent refresh: there is
-      // no access token yet, so /auth/me 401s, the client refreshes using the
-      // stored refresh token, persists the rotated pair, and replays /auth/me.
       const { user } = await authApi.me();
+      await secureStore.setCachedUser(user).catch(() => {});
       set({ status: 'authed', user });
     } catch (err) {
-      // Refresh token is expired/invalid/reused — start clean.
       if (err instanceof AbhiApiError && err.isFatalAuth) {
+        accessTokenRef = null;
         await secureStore.clearRefreshToken();
+        await secureStore.clearCachedUser().catch(() => {});
+        set({ status: 'guest', user: null });
       }
-      accessTokenRef = null;
-      set({ status: 'guest', user: null });
+      // Non-fatal (offline, 5xx): stay optimistically authed on the cached user.
+      // The next authed request will re-verify. We do NOT log the user out for
+      // a transient network problem — that would be a hostile cold-start.
     }
   },
 
   async signIn(result) {
     accessTokenRef = result.accessToken;
     await secureStore.setRefreshToken(result.refreshToken);
+    await secureStore.setCachedUser(result.user).catch(() => {});
     set({ status: 'authed', user: result.user });
   },
 
@@ -90,6 +103,7 @@ export const useSession = create<SessionState>((set, get) => ({
     }
     accessTokenRef = null;
     await secureStore.clearRefreshToken();
+    await secureStore.clearCachedUser().catch(() => {});
     set({ status: 'guest', user: null });
   },
 }));
@@ -110,6 +124,7 @@ export function initSessionBridge(): void {
     onSessionInvalid: async () => {
       accessTokenRef = null;
       await secureStore.clearRefreshToken();
+      await secureStore.clearCachedUser().catch(() => {});
       // Flip the tree to the auth stack. Safe to call from anywhere.
       useSession.setState({ status: 'guest', user: null });
     },

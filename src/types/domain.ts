@@ -228,6 +228,38 @@ export interface Booking extends BookingListItem {
   startedAt: string | null;
   completedAt: string | null;
   updatedAt: string;
+  // Trip-type extras.
+  rentalPackageId?: number | null;
+  rentalHours?: number | null;
+  flightNumber?: string | null;
+  // The frozen fare breakdown. For HOURLY, components.meta carries the package
+  // label and included hours/km; components.configSnapshot carries the rates.
+  fareBasis?: FareBasis | null;
+}
+
+/** The frozen fare breakdown stored on a booking. */
+export interface FareBasis {
+  quotedAt?: string;
+  total?: string;
+  components?: {
+    total?: string;
+    meta?: {
+      rental?: boolean;
+      includedHours?: number;
+      includedKm?: number;
+      packageLabel?: string | null;
+      [k: string]: unknown;
+    };
+    configSnapshot?: {
+      perKm?: string;
+      hourlyRate?: string;
+      extraPerKm?: string;
+      [k: string]: unknown;
+    };
+    breakdown?: { label: string; amount: string; note?: string }[];
+    [k: string]: unknown;
+  };
+  [k: string]: unknown;
 }
 
 export interface CreateBookingRequest {

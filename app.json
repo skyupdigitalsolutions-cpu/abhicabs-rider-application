@@ -48,6 +48,15 @@
         {
           "locationWhenInUsePermission": "AbhiCabs uses your location to set your pickup point and track your ride."
         }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#FFFFFF"
+        }
       ]
     ],
     "extra": {
