@@ -52,3 +52,7 @@ export const type = {
   label: { fontSize: 14, fontWeight: '600' as const },
   caption: { fontSize: 12, fontWeight: '400' as const },
 } as const;
+
+export const button = {
+  
+}

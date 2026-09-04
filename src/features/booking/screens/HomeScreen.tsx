@@ -1,180 +1,190 @@
 /**
- * src/features/booking/screens/HomeScreen.tsx
+ * src/features/booking/screens/HomeScreen.tsx — full-screen-map layout.
  *
- * The launch pad for a ride. It shows the two things that start every booking —
- * "from where" and "to where" — plus saved addresses as one-tap shortcuts and a
- * trip-type toggle. Tapping a field opens the search screen; the chosen place
- * lands back in the booking draft, which this screen reads reactively.
- *
- * No map yet (that arrives with the fare/route slice). The pickup/drop fields
- * are the interaction; the map is decoration we add once selection works.
- *
- * Empty state, per the design guidance, is an invitation: when nothing is
- * chosen the field reads "Add pickup" / "Where to?" — a prompt to act, not a
- * blank.
+ * The live map fills the top of the screen edge-to-edge; a rounded card floats
+ * up over its lower edge with the booking controls: service tabs (Outstation /
+ * Local / Airport), a "Where to?" entry, Trip Start / Trip End date-time
+ * pickers, and the primary action. All booking logic is unchanged; only the
+ * presentation is new. The map is lazy so react-native-maps stays off boot.
  */
 
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Dimensions,
+  Platform,
   Pressable,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
-import { useSession } from '../../../store/session';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useBookingDraft } from '../../../store/bookingDraft';
 import { useSavedAddresses, useRentalPackages } from '../api';
+import { useNearbyCars } from '../nearby.api';
+import { useUserLocation } from '../../../lib/useUserLocation';
 import type { HomeScreenProps } from '../../../navigation/types';
-import type { SavedAddress, TripType, ServiceKind, RentalPackage } from '../../../types/domain';
+import type { TripType, ServiceKind, RentalPackage } from '../../../types/domain';
 import { colors, radius, spacing, type } from '../../../theme';
 
+const HomeMap = lazy(() =>
+  import('../components/HomeMap').then((m) => ({ default: m.HomeMap })),
+);
+
+const { height: SCREEN_H } = Dimensions.get('window');
+const MAP_HEIGHT = Math.round(SCREEN_H * 0.55);
+
 export function HomeScreen({ navigation }: HomeScreenProps) {
-  const userName = useSession((s) => s.user?.name ?? 'there');
   const draft = useBookingDraft();
   const {
     cityId, pickup, drop, tripType, rentalPackageId, rentalHours,
-    setTripType, setPickup, swap, setRentalPackageId, setRentalHours,
+    pickupAt, returnAt,
+    setTripType, setRentalPackageId, setRentalHours,
+    setPickupAt, setReturnAt,
   } = draft;
-  const addresses = useSavedAddresses();
 
-  // Which top tab is active is derived from the wire tripType.
+  useSavedAddresses();
+  const { coord: userLoc, status: locStatus } = useUserLocation();
+  const nearby = useNearbyCars(userLoc);
+
   const service: ServiceKind =
     tripType === 'HOURLY' ? 'LOCAL' : tripType === 'AIRPORT' ? 'AIRPORT' : 'OUTSTATION';
 
-  // Switching tabs picks a sensible default TripType for that service.
   function selectService(next: ServiceKind) {
     if (next === 'OUTSTATION') setTripType('ONE_WAY');
     else if (next === 'LOCAL') setTripType('HOURLY');
     else setTripType('AIRPORT');
   }
 
-  // HOURLY requires a package or hours before we can quote.
   const hourlyReady = tripType !== 'HOURLY' || Boolean(rentalPackageId || rentalHours);
-  // Local (hourly) has no drop — pickup + a package/hours is enough. Every other
-  // service needs both pickup and drop.
   const canContinue =
-    service === 'LOCAL'
-      ? Boolean(pickup) && hourlyReady
-      : Boolean(pickup && drop);
+    service === 'LOCAL' ? Boolean(pickup) && hourlyReady : Boolean(pickup && drop);
+
+  const showReturn = tripType === 'ROUND_TRIP';
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      {/* Top bar — links to trip history and the account/profile screen. */}
-      <View style={styles.topBar}>
-        <Pressable onPress={() => navigation.navigate('Trips')} hitSlop={8}>
-          <Text style={styles.topBarLink}>Your trips</Text>
+    <View style={styles.root}>
+      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+
+      <View style={styles.mapLayer}>
+        <Suspense fallback={<View style={styles.mapFallback}><ActivityIndicator color={colors.primary} /></View>}>
+          <HomeMap
+            centre={userLoc}
+            cars={nearby.data ?? []}
+            loading={locStatus === 'loading'}
+            height={MAP_HEIGHT}
+            fullBleed
+          />
+        </Suspense>
+      </View>
+
+      <View style={styles.topOverlay}>
+        <Pressable style={styles.topPill} onPress={() => navigation.navigate('Profile')} hitSlop={8}>
+          <Text style={styles.topPillText}>☰  Account</Text>
         </Pressable>
-        <Pressable onPress={() => navigation.navigate('Profile')} hitSlop={8}>
-          <Text style={styles.topBarLink}>Account</Text>
+        <Pressable style={styles.topPill} onPress={() => navigation.navigate('Trips')} hitSlop={8}>
+          <Text style={styles.topPillText}>Your trips</Text>
         </Pressable>
       </View>
 
-      <Text style={styles.greeting}>Hi {userName.split(' ')[0]}</Text>
-      <Text style={styles.prompt}>Where are you headed?</Text>
+      <ScrollView style={styles.sheet} contentContainerStyle={styles.sheetContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.brandStrip}>
+          <Text style={styles.brandText}>AbhiCabs</Text>
+        </View>
 
-      {/* Savaari-style top tabs */}
-      <ServiceTabs value={service} onChange={selectService} />
+        <ServiceTabs value={service} onChange={selectService} />
 
-      {/* Outstation has a one-way / round-trip sub-toggle */}
-      {service === 'OUTSTATION' ? (
-        <SubToggle
-          options={[
-            { key: 'ONE_WAY', label: 'One way' },
-            { key: 'ROUND_TRIP', label: 'Round trip' },
-          ]}
-          value={tripType}
-          onChange={setTripType}
-        />
-      ) : null}
-
-      {/* Pickup / drop card. Local rentals have no destination, so only pickup. */}
-      <View style={styles.routeCard}>
-        <PlaceField
-          kind="pickup"
-          label={service === 'LOCAL' ? 'From' : 'Pickup'}
-          value={pickup?.label ?? null}
-          placeholder="Add pickup point"
-          onPress={() => navigation.navigate('PlaceSearch', { field: 'pickup' })}
-        />
-
-        {service !== 'LOCAL' ? (
-          <>
-            <View style={styles.divider} />
-            <PlaceField
-              kind="drop"
-              label="Drop"
-              value={drop?.label ?? null}
-              placeholder="Where to?"
-              onPress={() => navigation.navigate('PlaceSearch', { field: 'drop' })}
-            />
-
-            {pickup && drop ? (
-              <Pressable style={styles.swapButton} onPress={swap} hitSlop={8}>
-                <Text style={styles.swapText}>Swap</Text>
-              </Pressable>
-            ) : null}
-          </>
+        {service === 'OUTSTATION' ? (
+          <SubToggle
+            options={[
+              { key: 'ONE_WAY', label: 'One way' },
+              { key: 'ROUND_TRIP', label: 'Round trip' },
+            ]}
+            value={tripType}
+            onChange={setTripType}
+          />
         ) : null}
-      </View>
 
-      {/* LOCAL: package picker + flexible hours */}
-      {service === 'LOCAL' ? (
-        <LocalRentalPicker
-          cityId={cityId}
-          selectedPackageId={rentalPackageId}
-          selectedHours={rentalHours}
-          onPickPackage={setRentalPackageId}
-          onPickHours={setRentalHours}
-        />
-      ) : null}
+        <Pressable
+          style={styles.whereTo}
+          onPress={() => navigation.navigate('PlaceSearch', { field: pickup ? 'drop' : 'pickup' })}
+        >
+          <Text style={styles.whereToIcon}>🔍</Text>
+          <Text style={[styles.whereToText, !pickup && !drop && styles.whereToPlaceholder]}>
+            {drop?.label ?? pickup?.label ?? 'Where to?'}
+          </Text>
+        </Pressable>
 
-      {/* Saved addresses as quick pickup shortcuts */}
-      <SavedAddresses
-        query={addresses}
-        onPick={(a) =>
-          setPickup({
-            label: `${a.label} · ${a.line1}`,
-            lat: a.lat ? Number(a.lat) : NaN,
-            lng: a.lng ? Number(a.lng) : NaN,
-            placeId: null,
-          })
-        }
-      />
+        <View style={styles.routeCard}>
+          <PlaceRow
+            kind="pickup"
+            label={service === 'LOCAL' ? 'From' : 'Pickup'}
+            value={pickup?.label ?? null}
+            placeholder="Add pickup point"
+            onPress={() => navigation.navigate('PlaceSearch', { field: 'pickup' })}
+          />
+          {service !== 'LOCAL' ? (
+            <>
+              <View style={styles.divider} />
+              <PlaceRow
+                kind="drop"
+                label="Drop"
+                value={drop?.label ?? null}
+                placeholder="Where to?"
+                onPress={() => navigation.navigate('PlaceSearch', { field: 'drop' })}
+              />
+            </>
+          ) : null}
+        </View>
 
-      <Pressable
-        style={[styles.cta, !canContinue && styles.ctaDisabled]}
-        disabled={!canContinue}
-        onPress={() => navigation.navigate('FareOptions')}
-      >
-        <Text style={styles.ctaText}>See fares</Text>
-      </Pressable>
-    </ScrollView>
+        <View style={styles.dateRow}>
+          <DateCard label="Trip Start" value={pickupAt} onChange={setPickupAt} minimumDate={new Date()} />
+          {showReturn ? (
+            <DateCard label="Trip End" value={returnAt ?? pickupAt} onChange={(iso) => setReturnAt(iso)} minimumDate={new Date(pickupAt)} />
+          ) : (
+            <View style={styles.dateCardSpacer} />
+          )}
+        </View>
+
+        {service === 'LOCAL' ? (
+          <LocalRentalPicker
+            cityId={cityId}
+            selectedPackageId={rentalPackageId}
+            selectedHours={rentalHours}
+            onPickPackage={setRentalPackageId}
+            onPickHours={setRentalHours}
+          />
+        ) : null}
+
+        <Pressable
+          style={[styles.cta, !canContinue && styles.ctaDisabled]}
+          disabled={!canContinue}
+          onPress={() => navigation.navigate('FareOptions')}
+        >
+          <Text style={styles.ctaText}>Search Car</Text>
+        </Pressable>
+      </ScrollView>
+    </View>
   );
 }
 
 /* -------------------------------- Subviews --------------------------------- */
 
-/** The three top-level services, Savaari-style. */
 function ServiceTabs(props: { value: ServiceKind; onChange: (s: ServiceKind) => void }) {
-  const tabs: { key: ServiceKind; label: string }[] = [
-    { key: 'OUTSTATION', label: 'Outstation' },
-    { key: 'LOCAL', label: 'Local' },
-    { key: 'AIRPORT', label: 'Airport' },
+  const tabs: { key: ServiceKind; label: string; icon: string }[] = [
+    { key: 'OUTSTATION', label: 'Ride', icon: '🚗' },
+    { key: 'LOCAL', label: 'Rental', icon: '⏱️' },
+    { key: 'AIRPORT', label: 'Airport', icon: '✈️' },
   ];
   return (
     <View style={styles.tabs}>
       {tabs.map((t) => {
         const active = props.value === t.key;
         return (
-          <Pressable
-            key={t.key}
-            style={[styles.tab, active && styles.tabActive]}
-            onPress={() => props.onChange(t.key)}
-          >
-            <Text style={[styles.tabText, active && styles.tabTextActive]}>{t.label}</Text>
+          <Pressable key={t.key} style={[styles.tab, active && styles.tabActive]} onPress={() => props.onChange(t.key)}>
+            <Text style={[styles.tabText, active && styles.tabTextActive]}>{t.icon}  {t.label}</Text>
           </Pressable>
         );
       })}
@@ -182,22 +192,13 @@ function ServiceTabs(props: { value: ServiceKind; onChange: (s: ServiceKind) => 
   );
 }
 
-/** A small pill sub-toggle (e.g. one-way / round-trip under Outstation). */
-function SubToggle(props: {
-  options: { key: TripType; label: string }[];
-  value: TripType;
-  onChange: (t: TripType) => void;
-}) {
+function SubToggle(props: { options: { key: TripType; label: string }[]; value: TripType; onChange: (t: TripType) => void }) {
   return (
     <View style={styles.toggle}>
       {props.options.map((o) => {
         const active = props.value === o.key;
         return (
-          <Pressable
-            key={o.key}
-            style={[styles.toggleOption, active && styles.toggleOptionActive]}
-            onPress={() => props.onChange(o.key)}
-          >
+          <Pressable key={o.key} style={[styles.toggleOption, active && styles.toggleOptionActive]} onPress={() => props.onChange(o.key)}>
             <Text style={[styles.toggleText, active && styles.toggleTextActive]}>{o.label}</Text>
           </Pressable>
         );
@@ -206,12 +207,54 @@ function SubToggle(props: {
   );
 }
 
-/**
- * Local-rental chooser: the fixed packages (4/40, 8/80, 12/120) as selectable
- * cards, plus a "flexible hours" stepper for anyone who wants a custom duration.
- * Fixed package and flexible hours are mutually exclusive (the store enforces
- * it); picking one visually clears the other.
- */
+function DateCard(props: { label: string; value: string; onChange: (iso: string) => void; minimumDate?: Date }) {
+  const [show, setShow] = useState(false);
+  const [mode, setMode] = useState<'date' | 'time'>('date');
+  const date = new Date(props.value);
+
+  const open = () => { setMode('date'); setShow(true); };
+
+  const onPicked = (_event: unknown, picked?: Date) => {
+    if (!picked) { setShow(false); return; }
+    if (Platform.OS === 'android') {
+      if (mode === 'date') {
+        const merged = new Date(props.value);
+        merged.setFullYear(picked.getFullYear(), picked.getMonth(), picked.getDate());
+        props.onChange(merged.toISOString());
+        setMode('time');
+        setShow(true);
+        return;
+      }
+      const merged = new Date(props.value);
+      merged.setHours(picked.getHours(), picked.getMinutes(), 0, 0);
+      props.onChange(merged.toISOString());
+      setShow(false);
+      return;
+    }
+    props.onChange(picked.toISOString());
+  };
+
+  return (
+    <>
+      <Pressable style={styles.dateCard} onPress={open}>
+        <Text style={styles.dateIcon}>📅</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.dateLabel}>{props.label}</Text>
+          <Text style={styles.dateValue}>{formatWhen(date)}</Text>
+        </View>
+      </Pressable>
+      {show ? (
+        <DateTimePicker
+          value={date}
+          mode={Platform.OS === 'ios' ? 'datetime' : mode}
+          minimumDate={props.minimumDate}
+          onChange={onPicked}
+        />
+      ) : null}
+    </>
+  );
+}
+
 function LocalRentalPicker(props: {
   cityId: number;
   selectedPackageId: number | null;
@@ -220,13 +263,8 @@ function LocalRentalPicker(props: {
   onPickHours: (hours: number | null) => void;
 }) {
   const { data, isLoading, isError } = useRentalPackages(props.cityId);
-  const [mode, setMode] = useState<'package' | 'flexible'>(
-    props.selectedHours ? 'flexible' : 'package',
-  );
+  const [mode, setMode] = useState<'package' | 'flexible'>(props.selectedHours ? 'flexible' : 'package');
 
-  // Packages come back per vehicle class; the labels (4hr/40km…) repeat across
-  // classes, so present one card per distinct label for the user to pick the
-  // DURATION. The actual class is chosen on the fares screen.
   const distinctByLabel = useMemo(() => {
     const seen = new Map<string, RentalPackage>();
     for (const p of data ?? []) if (!seen.has(p.label)) seen.set(p.label, p);
@@ -235,18 +273,11 @@ function LocalRentalPicker(props: {
 
   return (
     <View style={styles.localCard}>
-      {/* mode switch */}
       <View style={styles.modeRow}>
-        <Pressable
-          style={[styles.modeBtn, mode === 'package' && styles.modeBtnActive]}
-          onPress={() => setMode('package')}
-        >
+        <Pressable style={[styles.modeBtn, mode === 'package' && styles.modeBtnActive]} onPress={() => setMode('package')}>
           <Text style={[styles.modeText, mode === 'package' && styles.modeTextActive]}>Packages</Text>
         </Pressable>
-        <Pressable
-          style={[styles.modeBtn, mode === 'flexible' && styles.modeBtnActive]}
-          onPress={() => setMode('flexible')}
-        >
+        <Pressable style={[styles.modeBtn, mode === 'flexible' && styles.modeBtnActive]} onPress={() => setMode('flexible')}>
           <Text style={[styles.modeText, mode === 'flexible' && styles.modeTextActive]}>Flexible hours</Text>
         </Pressable>
       </View>
@@ -259,32 +290,18 @@ function LocalRentalPicker(props: {
         ) : (
           <View style={styles.pkgGrid}>
             {distinctByLabel.map((p) => {
-              const active = props.selectedPackageId != null &&
-                (data ?? []).some((x) => x.id === props.selectedPackageId && x.label === p.label);
+              const active = props.selectedPackageId != null && (data ?? []).some((x) => x.id === props.selectedPackageId && x.label === p.label);
               return (
-                <Pressable
-                  key={p.label}
-                  style={[styles.pkgCard, active && styles.pkgCardActive]}
-                  // Store the id of THIS label's row; the fares screen re-resolves
-                  // per class. We pass the representative id here.
-                  onPress={() => props.onPickPackage(active ? null : p.id)}
-                >
-                  <Text style={[styles.pkgHours, active && styles.pkgTextActive]}>
-                    {p.includedHours} hrs
-                  </Text>
-                  <Text style={[styles.pkgKm, active && styles.pkgTextActive]}>
-                    {p.includedKm} km
-                  </Text>
+                <Pressable key={p.label} style={[styles.pkgCard, active && styles.pkgCardActive]} onPress={() => props.onPickPackage(active ? null : p.id)}>
+                  <Text style={[styles.pkgHours, active && styles.pkgTextActive]}>{p.includedHours} hrs</Text>
+                  <Text style={[styles.pkgKm, active && styles.pkgTextActive]}>{p.includedKm} km</Text>
                 </Pressable>
               );
             })}
           </View>
         )
       ) : (
-        <HoursStepper
-          value={props.selectedHours ?? 4}
-          onChange={(h) => props.onPickHours(h)}
-        />
+        <HoursStepper value={props.selectedHours ?? 4} onChange={(h) => props.onPickHours(h)} />
       )}
     </View>
   );
@@ -295,36 +312,23 @@ function HoursStepper(props: { value: number; onChange: (h: number) => void }) {
   const inc = () => props.onChange(Math.min(24, props.value + 1));
   return (
     <View style={styles.stepperRow}>
-      <Pressable style={styles.stepBtn} onPress={dec} hitSlop={8}>
-        <Text style={styles.stepGlyph}>–</Text>
-      </Pressable>
+      <Pressable style={styles.stepBtn} onPress={dec} hitSlop={8}><Text style={styles.stepGlyph}>–</Text></Pressable>
       <View style={styles.stepValueWrap}>
         <Text style={styles.stepValue}>{props.value}</Text>
         <Text style={styles.stepUnit}>hours</Text>
       </View>
-      <Pressable style={styles.stepBtn} onPress={inc} hitSlop={8}>
-        <Text style={styles.stepGlyph}>+</Text>
-      </Pressable>
+      <Pressable style={styles.stepBtn} onPress={inc} hitSlop={8}><Text style={styles.stepGlyph}>+</Text></Pressable>
     </View>
   );
 }
 
-function PlaceField(props: {
-  kind: 'pickup' | 'drop';
-  label: string;
-  value: string | null;
-  placeholder: string;
-  onPress: () => void;
-}) {
+function PlaceRow(props: { kind: 'pickup' | 'drop'; label: string; value: string | null; placeholder: string; onPress: () => void }) {
   return (
     <Pressable style={styles.field} onPress={props.onPress}>
       <View style={[styles.dot, props.kind === 'pickup' ? styles.dotPickup : styles.dotDrop]} />
-      <View style={styles.fieldTextWrap}>
+      <View style={{ flex: 1 }}>
         <Text style={styles.fieldLabel}>{props.label}</Text>
-        <Text
-          style={[styles.fieldValue, !props.value && styles.fieldPlaceholder]}
-          numberOfLines={1}
-        >
+        <Text style={[styles.fieldValue, !props.value && styles.fieldPlaceholder]} numberOfLines={1}>
           {props.value ?? props.placeholder}
         </Text>
       </View>
@@ -332,168 +336,92 @@ function PlaceField(props: {
   );
 }
 
-function SavedAddresses(props: {
-  query: ReturnType<typeof useSavedAddresses>;
-  onPick: (a: SavedAddress) => void;
-}) {
-  const { data, isLoading, isError } = props.query;
-
-  // Only addresses that have coordinates can seed a booking directly.
-  const usable = useMemo(() => (data ?? []).filter((a) => a.lat && a.lng), [data]);
-
-  if (isLoading) {
-    return (
-      <View style={styles.savedLoading}>
-        <ActivityIndicator color={colors.textMuted} />
-      </View>
-    );
-  }
-  if (isError || usable.length === 0) return null; // silent: shortcuts are a bonus, not required
-
-  return (
-    <View style={styles.saved}>
-      <Text style={styles.savedTitle}>Saved places</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.savedRow}>
-        {usable.map((a) => (
-          <Pressable key={a.id} style={styles.savedChip} onPress={() => props.onPick(a)}>
-            <Text style={styles.savedChipLabel}>{a.label}</Text>
-            <Text style={styles.savedChipLine} numberOfLines={1}>
-              {a.line1}
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
-    </View>
-  );
+function formatWhen(d: Date): string {
+  return d.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.xl, paddingTop: spacing.xxl, gap: spacing.lg },
-  topBar: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.lg, marginBottom: spacing.xs },
-  topBarLink: { ...type.label, color: colors.text },
-  greeting: { ...type.body, color: colors.textMuted },
-  prompt: { ...type.display, color: colors.text, marginBottom: spacing.sm },
-
-  /* top service tabs */
-  tabs: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
+  mapLayer: { position: 'absolute', top: 0, left: 0, right: 0, height: MAP_HEIGHT },
+  mapFallback: { flex: 1, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  topOverlay: {
+    position: 'absolute', top: (StatusBar.currentHeight ?? 40) + 8, left: spacing.lg, right: spacing.lg,
+    flexDirection: 'row', justifyContent: 'space-between', zIndex: 10,
   },
-  tab: { flex: 1, paddingVertical: spacing.md, alignItems: 'center' },
-  tabActive: { backgroundColor: colors.primary },
-  tabText: { ...type.label, color: colors.textMuted },
-  tabTextActive: { color: colors.primaryText },
-
-  sectionLabel: { ...type.label, color: colors.text, marginBottom: spacing.xs },
-
-  /* local rental */
-  localCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    gap: spacing.md,
-  },
-  modeRow: { flexDirection: 'row', gap: spacing.sm },
-  modeBtn: {
+  topPill: {
+    backgroundColor: '#FFFFFF', borderRadius: radius.pill,
     paddingVertical: spacing.sm, paddingHorizontal: spacing.lg,
-    borderRadius: radius.pill, backgroundColor: colors.surfaceAlt,
+    shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 3,
   },
-  modeBtnActive: { backgroundColor: colors.primary },
-  modeText: { ...type.label, color: colors.textMuted },
-  modeTextActive: { color: colors.primaryText },
-
-  pkgGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  pkgCard: {
-    flexGrow: 1, minWidth: 90, alignItems: 'center',
-    paddingVertical: spacing.md, borderRadius: radius.md,
-    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceAlt,
+  topPillText: { ...type.label, color: colors.text },
+  sheet: { flex: 1, marginTop: MAP_HEIGHT - 28 },
+  sheetContent: {
+    backgroundColor: colors.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.lg,
+    minHeight: SCREEN_H - MAP_HEIGHT + 40,
   },
-  pkgCardActive: { borderColor: colors.primary, backgroundColor: colors.primary },
-  pkgHours: { ...type.label, color: colors.text },
-  pkgKm: { ...type.caption, color: colors.textMuted },
-  pkgTextActive: { color: colors.primaryText },
-
-  /* flexible hours stepper */
-  stepperRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  stepBtn: {
-    width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border,
-  },
-  stepGlyph: { ...type.display, fontSize: 24, color: colors.text },
-  stepValueWrap: { alignItems: 'center' },
-  stepValue: { ...type.display, fontSize: 28, color: colors.text },
-  stepUnit: { ...type.caption, color: colors.textMuted },
-
-  /* airport */
-  airportCard: {
-    backgroundColor: colors.surface, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: colors.border, padding: spacing.lg, gap: spacing.xs,
-  },
-  flightInput: {
-    ...type.body, color: colors.text, backgroundColor: colors.surfaceAlt,
-    borderRadius: radius.md, borderWidth: 1, borderColor: colors.border,
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-  },
-  hint: { ...type.caption, color: colors.textMuted },
-
-  toggle: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderRadius: radius.pill,
-    padding: spacing.xs,
-    alignSelf: 'flex-start',
-  },
+  brandStrip: { backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center', marginBottom: spacing.xs },
+  brandText: { ...type.display, fontSize: 22, color: colors.primaryText, fontWeight: '800' },
+  tabs: { flexDirection: 'row', backgroundColor: colors.surface, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, padding: spacing.xs },
+tab: { flex: 1, paddingVertical: spacing.md, alignItems: 'center', borderRadius: radius.pill },
+tabActive: {
+  backgroundColor: colors.primary,
+  shadowColor: '#111111',
+  shadowOpacity: 0.20,
+  shadowRadius: 8,
+  shadowOffset: { width: 0, height: 3 },
+  elevation: 4,
+},
+  tabText: { ...type.label, color: colors.textMuted, fontSize: 13 },
+  tabTextActive: { color: colors.primaryText },
+  toggle: { flexDirection: 'row', backgroundColor: colors.surface, borderRadius: radius.pill, padding: spacing.xs, alignSelf: 'flex-start' },
   toggleOption: { paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, borderRadius: radius.pill },
   toggleOptionActive: { backgroundColor: colors.primary },
   toggleText: { ...type.label, color: colors.textMuted },
   toggleTextActive: { color: colors.primaryText },
-
-  routeCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
+  whereTo: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border,
+    paddingVertical: spacing.lg, paddingHorizontal: spacing.lg,
   },
+  whereToIcon: { fontSize: 18 },
+  whereToText: { ...type.label, color: colors.text, fontSize: 16, flex: 1 },
+  whereToPlaceholder: { color: colors.textMuted },
+  routeCard: { backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.lg },
   field: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm },
   dot: { width: 10, height: 10, borderRadius: 5, marginRight: spacing.md },
   dotPickup: { backgroundColor: colors.primary },
   dotDrop: { backgroundColor: colors.danger },
-  fieldTextWrap: { flex: 1 },
   fieldLabel: { ...type.caption, color: colors.textMuted },
   fieldValue: { ...type.body, color: colors.text },
   fieldPlaceholder: { color: colors.textMuted },
-  divider: { height: 1, backgroundColor: colors.border, marginLeft: 22 },
-  swapButton: { position: 'absolute', right: spacing.lg, top: spacing.lg },
-  swapText: { ...type.label, color: colors.primary },
-
-  saved: { gap: spacing.sm },
-  savedLoading: { paddingVertical: spacing.md, alignItems: 'flex-start' },
-  savedTitle: { ...type.label, color: colors.textMuted },
-  savedRow: { gap: spacing.sm, paddingVertical: spacing.xs },
-  savedChip: {
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    minWidth: 140,
-  },
-  savedChipLabel: { ...type.label, color: colors.text },
-  savedChipLine: { ...type.caption, color: colors.textMuted, marginTop: 2 },
-
-  cta: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: spacing.lg,
-    alignItems: 'center',
-    marginTop: spacing.md,
-  },
+  divider: { height: 1, backgroundColor: colors.border, marginLeft: 22, marginVertical: spacing.xs },
+  dateRow: { flexDirection: 'row', gap: spacing.md },
+  dateCard: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.md },
+  dateCardSpacer: { flex: 1 },
+  dateIcon: { fontSize: 18 },
+  dateLabel: { ...type.caption, color: colors.textMuted },
+  dateValue: { ...type.label, color: colors.primary, fontSize: 13 },
+  localCard: { backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, gap: spacing.md },
+  modeRow: { flexDirection: 'row', gap: spacing.sm },
+  modeBtn: { paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt },
+  modeBtnActive: { backgroundColor: colors.primary },
+  modeText: { ...type.label, color: colors.textMuted },
+  modeTextActive: { color: colors.primaryText },
+  pkgGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  pkgCard: { flexGrow: 1, minWidth: 90, alignItems: 'center', paddingVertical: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceAlt },
+  pkgCardActive: { borderColor: colors.primary, backgroundColor: colors.primary },
+  pkgHours: { ...type.label, color: colors.text },
+  pkgKm: { ...type.caption, color: colors.textMuted },
+  pkgTextActive: { color: colors.primaryText },
+  hint: { ...type.caption, color: colors.textMuted },
+  stepperRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  stepBtn: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border },
+  stepGlyph: { ...type.display, fontSize: 24, color: colors.text },
+  stepValueWrap: { alignItems: 'center' },
+  stepValue: { ...type.display, fontSize: 28, color: colors.text },
+  stepUnit: { ...type.caption, color: colors.textMuted },
+  cta: { backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: spacing.lg, alignItems: 'center', marginTop: spacing.sm },
   ctaDisabled: { backgroundColor: colors.surfaceAlt },
   ctaText: { ...type.label, color: colors.primaryText, fontSize: 16 },
 });

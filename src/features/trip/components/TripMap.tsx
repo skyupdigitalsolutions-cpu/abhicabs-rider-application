@@ -50,6 +50,40 @@ const DARK_MAP_STYLE = [
 const ROUTE_BLUE = '#4C8DFF';
 const ROUTE_OUTLINE = '#1B3A6B';
 
+/**
+ * Approximate distance (metres) from a point to the nearest segment of a
+ * polyline. Uses an equirectangular projection to local metres — plenty
+ * accurate over the short spans between route points, and cheap enough to run
+ * on every ping. This is what lets us tell "still on the road we drew" from
+ * "took a different road" without calling any API.
+ */
+function metresFromPolyline(p: { lat: number; lng: number }, line: { lat: number; lng: number }[]): number {
+  const R = 111_320; // metres per degree latitude
+  const latRad = (p.lat * Math.PI) / 180;
+  const mx = (lng: number) => lng * R * Math.cos(latRad);
+  const my = (lat: number) => lat * R;
+  const px = mx(p.lng);
+  const py = my(p.lat);
+
+  let best = Infinity;
+  for (let i = 1; i < line.length; i++) {
+    const prev = line[i - 1];
+    const curr = line[i];
+    if (!prev || !curr) continue;
+    const ax = mx(prev.lng), ay = my(prev.lat);
+    const bx = mx(curr.lng), by = my(curr.lat);
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx * dx + dy * dy || 1;
+    // Project point onto the segment, clamped to its ends.
+    let t = ((px - ax) * dx + (py - ay) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    const cx = ax + t * dx, cy = ay + t * dy;
+    const d = Math.hypot(px - cx, py - cy);
+    if (d < best) best = d;
+  }
+  return best;
+}
+
 interface Props {
   pickup: LatLng;
   drop: LatLng;
@@ -72,16 +106,52 @@ export function TripMap({ pickup, drop, driver, live = false, threeD = true, hei
 
   const toCoord = (p: LatLng) => ({ latitude: p.lat, longitude: p.lng });
 
-  // Fetch the driving route once we know pickup + drop. Re-fetch only when the
-  // endpoints change (not on every driver ping — the road path is the same).
-  useEffect(() => {
-    let cancelled = false;
+  // Origin for the route: while live with a known driver, route FROM the driver
+  // to the drop (so the line always starts at the cab). Otherwise pickup→drop.
+  const routeOrigin = live && driver ? driver : pickup;
+
+  // Guards so we don't spam the paid Directions API:
+  //  • lastRouteFrom  — where we last fetched a route from
+  //  • offRouteHits   — consecutive pings the driver has been off the line
+  // We only re-fetch when the driver has genuinely deviated, not every ping.
+  const lastRouteFrom = useRef<LatLng | null>(null);
+  const offRouteHits = useRef(0);
+  const DEVIATE_M = 60;        // metres off the line that counts as "off route"
+  const REROUTE_AFTER = 2;     // consecutive off-route pings before we re-fetch
+
+  const fetchRoute = (from: LatLng, to: LatLng) => {
+    lastRouteFrom.current = from;
     fareApi
-      .route({ lat: pickup.lat, lng: pickup.lng }, { lat: drop.lat, lng: drop.lng })
-      .then((r) => { if (!cancelled) setRoutePts(r.route.points); })
-      .catch(() => { if (!cancelled) setRoutePts(null); });
-    return () => { cancelled = true; };
+      .route({ lat: from.lat, lng: from.lng }, { lat: to.lat, lng: to.lng })
+      .then((r) => setRoutePts(r.route.points))
+      .catch(() => { /* keep the old line; never blank the map on a failed re-fetch */ });
+  };
+
+  // Initial route: fetch once when we first have endpoints (or the driver first
+  // appears). Endpoint changes (a new booking) also refetch.
+  useEffect(() => {
+    fetchRoute(routeOrigin, drop);
+    offRouteHits.current = 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickup.lat, pickup.lng, drop.lat, drop.lng]);
+
+  // Deviation check: on each driver move, measure how far the driver is from the
+  // drawn route. If they're off it for REROUTE_AFTER pings running, re-fetch the
+  // route from their current spot — this is the "driver took a shortcut" case.
+  useEffect(() => {
+    if (!live || !driver || !routePts || routePts.length < 2) return;
+    const offBy = metresFromPolyline(driver, routePts);
+    if (offBy > DEVIATE_M) {
+      offRouteHits.current += 1;
+      if (offRouteHits.current >= REROUTE_AFTER) {
+        offRouteHits.current = 0;
+        fetchRoute(driver, drop);
+      }
+    } else {
+      offRouteHits.current = 0;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [driver?.lat, driver?.lng]);
 
   // Camera control.
   //  • Driver known → follow the driver as pings arrive. In 3D this is a tilted

@@ -191,6 +191,9 @@ export function TripScreen({ route, navigation }: TripScreenProps) {
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Fare</Text>
         <Row label="Vehicle" value={data.booking.vehicleClass} />
+        {data.booking.distanceKm != null ? (
+          <Row label="Distance" value={`${Number(data.booking.distanceKm).toFixed(1)} km`} />
+        ) : null}
         <Row
           label={data.booking.finalFare ? 'Total' : 'Estimated'}
           value={`₹${data.booking.finalFare ?? data.booking.estimatedFare ?? '—'}`}

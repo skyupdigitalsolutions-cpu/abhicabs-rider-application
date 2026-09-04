@@ -7,7 +7,9 @@
  *      opened. Light screens (Welcome/Login/Home/PlaceSearch) stay eager for an
  *      instant first paint.
  *   2. The native splash screen is held until the session bootstrap resolves,
- *      then hidden — no white flash, no bare ActivityIndicator gate.
+ *      then hidden — no white flash, no bare ActivityIndicator gate. The guest
+ *      flow then starts at Decide, which routes to Onboarding on first launch
+ *      or straight to Welcome for returning users.
  *   3. socket.io-client is dynamically imported inside the authed effect, so its
  *      ~2.9 MB is kept off the launch bundle path (guests never load it).
  */
@@ -24,6 +26,8 @@ import { useSession, initSessionBridge } from './src/store/session';
 
 // --- EAGER: light screens on the first-paint path (no maps, tiny) -----------
 import { WelcomeScreen } from './src/features/auth/screens/WelcomeScreen';
+import { DecideScreen } from './src/features/auth/screens/DecideScreen';
+import { OnboardingScreen } from './src/features/auth/screens/OnboardingScreen';
 import { RegisterScreen } from './src/features/auth/screens/RegisterScreen';
 import { LoginScreen } from './src/features/auth/screens/LoginScreen';
 import { HomeScreen } from './src/features/booking/screens/HomeScreen';
@@ -91,9 +95,11 @@ function AuthedNavigator() {
 function GuestNavigator() {
   return (
     <AuthStack.Navigator
-      initialRouteName="Welcome"
+      initialRouteName="Decide"
       screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}
     >
+      <AuthStack.Screen name="Decide" component={DecideScreen} />
+      <AuthStack.Screen name="Onboarding" component={OnboardingScreen} />
       <AuthStack.Screen name="Welcome" component={WelcomeScreen} />
       <AuthStack.Screen name="Register" component={RegisterScreen} options={{ headerShown: true, title: '', headerShadowVisible: false, headerTintColor: colors.text }} />
       <AuthStack.Screen name="Login" component={LoginScreen} options={{ headerShown: true, title: '', headerShadowVisible: false, headerTintColor: colors.text }} />

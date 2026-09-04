@@ -17,6 +17,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -99,8 +100,13 @@ export function LoginScreen({ route, navigation }: LoginScreenProps) {
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
       <View style={styles.header}>
         <Text style={styles.brand}>AbhiCabs</Text>
         <Text style={styles.tagline}>
@@ -182,6 +188,7 @@ export function LoginScreen({ route, navigation }: LoginScreenProps) {
           </View>
         </View>
       )}
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -212,7 +219,8 @@ function PrimaryButton(props: {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg, padding: spacing.xl, justifyContent: 'center' },
+  root: { flex: 1, backgroundColor: colors.bg },
+  scrollContent: { flexGrow: 1, padding: spacing.xl, justifyContent: 'center' },
   header: { marginBottom: spacing.xxl },
   brand: { ...type.display, color: colors.primary, marginBottom: spacing.sm },
   tagline: { ...type.body, color: colors.textMuted },

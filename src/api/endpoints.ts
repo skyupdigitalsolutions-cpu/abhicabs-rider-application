@@ -105,6 +105,13 @@ export const fareApi = {
         provider: string;
       };
     }>('/fares/route', { origin, destination }),
+
+  // Anonymized "cars near me" for the home map: { count, cars: [{lat,lng}] }.
+  nearbyCars: (lat: number, lng: number, radiusKm = 5) =>
+    http.get<{ count: number; cars: { lat: number; lng: number }[] }>(
+      '/location/nearby-cars',
+      { query: { lat, lng, radiusKm } },
+    ),
 };
 
 /* -------------------------------- Bookings --------------------------------- */
