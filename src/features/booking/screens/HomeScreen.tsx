@@ -20,6 +20,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useBookingDraft } from '../../../store/bookingDraft';
 import { useSavedAddresses, useRentalPackages } from '../api';
@@ -183,8 +184,21 @@ function ServiceTabs(props: { value: ServiceKind; onChange: (s: ServiceKind) => 
       {tabs.map((t) => {
         const active = props.value === t.key;
         return (
-          <Pressable key={t.key} style={[styles.tab, active && styles.tabActive]} onPress={() => props.onChange(t.key)}>
-            <Text style={[styles.tabText, active && styles.tabTextActive]}>{t.icon}  {t.label}</Text>
+          <Pressable
+            key={t.key}
+            style={[styles.tab, active && styles.tabActiveShadow]}
+            onPress={() => props.onChange(t.key)}
+          >
+            <LinearGradient
+              colors={active ? ['#FFD54F', '#FFB300'] : ['#FFFFFF', '#F2F2F2']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={styles.tabGradient}
+            >
+              <Text style={[styles.tabText, active && styles.tabTextActive]}>
+                {t.icon}  {t.label}
+              </Text>
+            </LinearGradient>
           </Pressable>
         );
       })}
@@ -362,18 +376,36 @@ const styles = StyleSheet.create({
   },
   brandStrip: { backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center', marginBottom: spacing.xs },
   brandText: { ...type.display, fontSize: 22, color: colors.primaryText, fontWeight: '800' },
-  tabs: { flexDirection: 'row', backgroundColor: colors.surface, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, padding: spacing.xs },
-tab: { flex: 1, paddingVertical: spacing.md, alignItems: 'center', borderRadius: radius.pill },
-tabActive: {
-  backgroundColor: colors.primary,
-  shadowColor: '#111111',
-  shadowOpacity: 0.20,
-  shadowRadius: 8,
-  shadowOffset: { width: 0, height: 3 },
-  elevation: 4,
-},
+
+  tabs: {
+    flexDirection: 'row',
+    backgroundColor: colors.surface,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.xs,
+  },
+  tab: {
+    flex: 1,
+    borderRadius: radius.pill,
+  },
+  tabActiveShadow: {
+    backgroundColor: colors.primary, // solid layer for the shadow to cast from
+    shadowColor: '#111111',
+    shadowOpacity: 0.20,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+  },
+  tabGradient: {
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    borderRadius: radius.pill,
+    overflow: 'hidden', // clips the gradient to the pill shape
+  },
   tabText: { ...type.label, color: colors.textMuted, fontSize: 13 },
   tabTextActive: { color: colors.primaryText },
+
   toggle: { flexDirection: 'row', backgroundColor: colors.surface, borderRadius: radius.pill, padding: spacing.xs, alignSelf: 'flex-start' },
   toggleOption: { paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, borderRadius: radius.pill },
   toggleOptionActive: { backgroundColor: colors.primary },

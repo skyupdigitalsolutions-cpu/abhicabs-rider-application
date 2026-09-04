@@ -13,7 +13,7 @@
  *   3. socket.io-client is dynamically imported inside the authed effect, so its
  *      ~2.9 MB is kept off the launch bundle path (guests never load it).
  */
-import './global.css';
+
 import { Suspense, lazy, useCallback, useEffect, useRef } from 'react';
 import { ActivityIndicator, AppState, type AppStateStatus, StyleSheet, View } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
