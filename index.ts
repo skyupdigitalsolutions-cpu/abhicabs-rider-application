@@ -1,3 +1,5 @@
+import './src/polyfills'; // MUST be first: defines global.DOMException before any dependency loads
+
 import { registerRootComponent } from 'expo';
 
 import App from './App';
