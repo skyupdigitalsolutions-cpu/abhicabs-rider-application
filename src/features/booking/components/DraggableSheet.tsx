@@ -2,14 +2,18 @@
  * src/features/booking/components/DraggableSheet.tsx
  *
  * Draggable bottom sheet on Animated + PanResponder (no native gesture libs).
- * Grab ANYWHERE on the sheet to drag it, with scroll blended in the way real
- * apps do:
+ * Grab ANYWHERE on the sheet to drag it — over the packages grid, over the
+ * flight-number TextInput, anywhere — while the body still scrolls when needed.
+ *
+ * The trick is capturing the gesture in the CAPTURE phase, before any child
+ * (ScrollView or TextInput) can claim it. Taps still reach children because we
+ * only capture on MOVE, never on the initial touch-down.
  *
  *   • Not full → any vertical drag moves the sheet.
- *   • Full + content at top → dragging DOWN moves the sheet; up scrolls.
- *   • Full + content scrolled → the body scrolls normally.
+ *   • Full + content at top → pull DOWN moves the sheet; up scrolls.
+ *   • Full + scrolled → the body scrolls.
  *
- * Two snaps: full (expanded) and half (default). onSnap reports the active snap.
+ * Two snaps: full (expanded) and half (default). onSnap reports the snap.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -70,23 +74,26 @@ export function DraggableSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Shared decision: should the sheet take this vertical drag?
+  const shouldDrag = (dy: number, dx: number) => {
+    const vertical = Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 8;
+    if (!vertical) return false;
+    const atFull = snapRef.current === 'full';
+    const draggingDown = dy > 0;
+    const atTop = scrollY.current <= 0;
+    if (!atFull) return true;                 // half → any vertical drag moves sheet
+    return draggingDown && atTop;             // full → pull-down from top moves sheet
+  };
+
   const pan = useMemo(
     () =>
       PanResponder.create({
-        // Decide, per gesture, whether the sheet drags or the body scrolls.
-        onMoveShouldSetPanResponder: (_e, g) => {
-          const vertical = Math.abs(g.dy) > Math.abs(g.dx) && Math.abs(g.dy) > 8;
-          if (!vertical) return false;
-
-          const atFull = snapRef.current === 'full';
-          const draggingDown = g.dy > 0;
-          const atTop = scrollY.current <= 0;
-
-          // Half → any vertical drag moves the sheet.
-          if (!atFull) return true;
-          // Full → only hijack a pull-DOWN that starts at the very top; else scroll.
-          return draggingDown && atTop;
-        },
+        // Let taps through to children (TextInput focus, buttons). Decide on move.
+        onStartShouldSetPanResponderCapture: () => false,
+        // Capture the MOVE before ScrollView/TextInput can — this is what makes
+        // "drag from anywhere" work on every tab, including over the TextInput.
+        onMoveShouldSetPanResponderCapture: (_e, g) => shouldDrag(g.dy, g.dx),
+        onMoveShouldSetPanResponder: (_e, g) => shouldDrag(g.dy, g.dx),
         onPanResponderGrant: () => setScrollEnabled(false),
         onPanResponderMove: (_e, g) => {
           const next = Math.min(HALF, Math.max(FULL, restY.current + g.dy));
@@ -144,7 +151,7 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 12, shadowOffset: { width: 0, height: -3 },
     elevation: 12,
   },
-  header: { height: 30, alignItems: 'center', justifyContent: 'center' },
+  header: { height: 40, alignItems: 'center', justifyContent: 'center' },
   handle: { width: 48, height: 5, borderRadius: 3, backgroundColor: colors.border },
   body: { flex: 1 },
 });
