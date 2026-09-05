@@ -26,11 +26,21 @@ export function SharedMap(props: {
   cars: CarDot[];
   loading: boolean;
   height: number;
+  pickupMode?: boolean;
+  onPickupChange?: (p: { lat: number; lng: number; label: string }) => void;
 }) {
   return (
     <View style={[styles.mapLayer, { height: props.height }]}>
       <Suspense fallback={<View style={styles.mapFallback}><ActivityIndicator color={colors.primary} /></View>}>
-        <HomeMap centre={props.centre} cars={props.cars} loading={props.loading} height={props.height} fullBleed />
+        <HomeMap
+          centre={props.centre}
+          cars={props.cars}
+          loading={props.loading}
+          height={props.height}
+          fullBleed
+          pickupMode={props.pickupMode}
+          onPickupChange={props.onPickupChange}
+        />
       </Suspense>
     </View>
   );

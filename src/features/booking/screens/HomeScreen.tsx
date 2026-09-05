@@ -1,11 +1,13 @@
 /**
  * src/features/booking/screens/HomeScreen.tsx
  *
- * Full-screen map + a draggable booking sheet, with a bottom tab bar
- * (Ride / Rental / Airport) that swaps the sheet's content. The map and sheet
- * stay put; only the mode body inside the sheet changes per tab. Each mode
- * lives in ServiceModes.tsx; shared pieces (map, search, dates, button) live in
- * BookingShared.tsx — so the three modes never duplicate that UI.
+ * Full-screen map + draggable booking sheet + bottom tab bar (Ride/Rental/
+ * Airport) that swaps the sheet content.
+ *
+ * Pickup-by-map (Rapido style): tapping "Set pickup on map" enters an explicit
+ * PICKING state — the sheet drops to peek, the map shows a fixed "Pickup Point"
+ * pin, and a Confirm button commits whatever's under the pin as the pickup. It
+ * can be re-entered anytime to change the pickup, and searching still works too.
  */
 
 import { useState } from 'react';
@@ -29,29 +31,57 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const { coord: userLoc, status: locStatus } = useUserLocation();
   const nearby = useNearbyCars(userLoc);
   const setTripType = useBookingDraft((s) => s.setTripType);
+  const setPickup = useBookingDraft((s) => s.setPickup);
 
   const [tab, setTab] = useState<Tab>('RIDE');
   const [sheetSnap, setSheetSnap] = useState<SnapName>('half');
 
+  // Explicit map-pickup picking state.
+  const [picking, setPicking] = useState(false);
+  const [pending, setPending] = useState<{ lat: number; lng: number; label: string } | null>(null);
+
   const selectTab = (t: Tab) => {
     setTab(t);
-    // Keep the wire trip type in step with the tab.
     if (t === 'RIDE') setTripType('ONE_WAY');
     else if (t === 'RENTAL') setTripType('HOURLY');
     else setTripType('AIRPORT');
+  };
+
+  const startPicking = () => {
+    setPicking(true);
+  };
+
+  const confirmPickup = () => {
+    if (pending) {
+      setPickup({ label: pending.label, lat: pending.lat, lng: pending.lng, placeId: null });
+    }
+    setPicking(false);
+    setSheetSnap('half');
+  };
+
+  const cancelPicking = () => {
+    setPicking(false);
+    setSheetSnap('half');
   };
 
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
 
-      {/* Full-screen map behind everything */}
+      {/* Full-screen map. In picking mode it becomes the pickup picker. */}
       <View style={styles.mapLayer}>
-        <SharedMap centre={userLoc} cars={nearby.data ?? []} loading={locStatus === 'loading'} height={SCREEN_H} />
+        <SharedMap
+          centre={userLoc}
+          cars={nearby.data ?? []}
+          loading={locStatus === 'loading'}
+          height={SCREEN_H}
+          pickupMode={picking}
+          onPickupChange={setPending}
+        />
       </View>
 
-      {/* Floating top pills, hidden when the sheet is full */}
-      {sheetSnap !== 'full' ? (
+      {/* Top pills — hidden while picking or when sheet is full */}
+      {!picking && sheetSnap !== 'full' ? (
         <View style={styles.topOverlay}>
           <Pressable style={styles.topPill} onPress={() => navigation.navigate('Profile')} hitSlop={8}>
             <Text style={styles.topPillText}>☰  Account</Text>
@@ -62,21 +92,43 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         </View>
       ) : null}
 
-      {/* Draggable sheet holds the brand strip + the active mode body */}
-      <DraggableSheet onSnap={setSheetSnap} contentContainerStyle={styles.sheetContent}>
-       
+      {/* Picking mode: a Confirm / Cancel bar floats above the bottom */}
+      {picking ? (
+        <View style={styles.confirmBar}>
+          <Pressable style={styles.cancelBtn} onPress={cancelPicking}>
+            <Text style={styles.cancelText}>Cancel</Text>
+          </Pressable>
+          <Pressable style={styles.confirmBtn} onPress={confirmPickup} disabled={!pending}>
+            <Text style={styles.confirmText}>Confirm pickup</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
-        {tab === 'RIDE' ? <RideMode navigation={navigation} /> : null}
-        {tab === 'RENTAL' ? <RentalMode navigation={navigation} /> : null}
-        {tab === 'AIRPORT' ? <AirportMode navigation={navigation} /> : null}
-      </DraggableSheet>
+      {/* The sheet + bottom tabs are hidden while picking, to keep the map clear */}
+      {!picking ? (
+        <>
+          <DraggableSheet onSnap={setSheetSnap} contentContainerStyle={styles.sheetContent}>
+            <View style={styles.brandStrip}>
+              <Text style={styles.brandText}>AbhiCabs</Text>
+            </View>
 
-      {/* Bottom tab bar — Ride / Rental / Airport */}
-      <View style={styles.tabBar}>
-        <TabButton icon="🚗" label="Ride" active={tab === 'RIDE'} onPress={() => selectTab('RIDE')} />
-        <TabButton icon="⏱️" label="Rental" active={tab === 'RENTAL'} onPress={() => selectTab('RENTAL')} />
-        <TabButton icon="✈️" label="Airport" active={tab === 'AIRPORT'} onPress={() => selectTab('AIRPORT')} />
-      </View>
+            {/* Set-pickup-on-map entry */}
+            <Pressable style={styles.mapPickBtn} onPress={startPicking}>
+              <Text style={styles.mapPickText}>📍  Set pickup on map</Text>
+            </Pressable>
+
+            {tab === 'RIDE' ? <RideMode navigation={navigation} /> : null}
+            {tab === 'RENTAL' ? <RentalMode navigation={navigation} /> : null}
+            {tab === 'AIRPORT' ? <AirportMode navigation={navigation} /> : null}
+          </DraggableSheet>
+
+          <View style={styles.tabBar}>
+            <TabButton icon="🚗" label="Ride" active={tab === 'RIDE'} onPress={() => selectTab('RIDE')} />
+            <TabButton icon="⏱️" label="Rental" active={tab === 'RENTAL'} onPress={() => selectTab('RENTAL')} />
+            <TabButton icon="✈️" label="Airport" active={tab === 'AIRPORT'} onPress={() => selectTab('AIRPORT')} />
+          </View>
+        </>
+      ) : null}
     </View>
   );
 }
@@ -106,9 +158,31 @@ const styles = StyleSheet.create({
   },
   topPillText: { ...type.label, color: colors.text },
 
-  sheetContent: { padding: spacing.xl, paddingTop: spacing.sm, paddingBottom: 96, gap: spacing.lg },
+  confirmBar: {
+    position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 30,
+    flexDirection: 'row', gap: spacing.md, padding: spacing.xl,
+    backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: colors.border,
+  },
+  cancelBtn: {
+    paddingVertical: spacing.lg, paddingHorizontal: spacing.xl, borderRadius: radius.md,
+    borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center',
+  },
+  cancelText: { ...type.label, color: colors.text },
+  confirmBtn: {
+    flex: 1, backgroundColor: colors.primary, borderRadius: radius.md,
+    paddingVertical: spacing.lg, alignItems: 'center', justifyContent: 'center',
+  },
+  confirmText: { ...type.label, color: colors.primaryText, fontSize: 16 },
+
+  sheetContent: { padding: spacing.xl, paddingTop: spacing.sm, paddingBottom: 140, gap: spacing.lg },
   brandStrip: { backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center', marginBottom: spacing.xs },
   brandText: { ...type.display, fontSize: 22, color: colors.primaryText, fontWeight: '800' },
+
+  mapPickBtn: {
+    backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.primary,
+    paddingVertical: spacing.md, alignItems: 'center',
+  },
+  mapPickText: { ...type.label, color: colors.primary },
 
   tabBar: {
     position: 'absolute', left: 0, right: 0, bottom: 0,

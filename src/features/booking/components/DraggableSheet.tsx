@@ -1,19 +1,15 @@
 /**
  * src/features/booking/components/DraggableSheet.tsx
  *
- * A Rapido/Uber-style draggable bottom sheet on React Native's Animated +
- * PanResponder — no native gesture libs, so no rebuild.
+ * Draggable bottom sheet on Animated + PanResponder (no native gesture libs).
+ * Grab ANYWHERE on the sheet to drag it, with scroll blended in the way real
+ * apps do:
  *
- * The whole sheet is draggable: grab ANYWHERE on the card to move it. It blends
- * dragging with the inner scroll the way real apps do:
- *   • Not expanded (below "full")     → any drag moves the sheet.
- *   • Expanded and scrolled to top    → dragging DOWN moves the sheet; dragging
- *                                       up scrolls the content.
- *   • Expanded and scrolled mid-list  → dragging scrolls the content normally.
+ *   • Not full → any vertical drag moves the sheet.
+ *   • Full + content at top → dragging DOWN moves the sheet; up scrolls.
+ *   • Full + content scrolled → the body scrolls normally.
  *
- * Snap points are translateY of the sheet's TOP edge (0 = screen top):
- *   full → covers the screen, half → default, peek → collapsed strip.
- * onSnap reports the active snap so the screen can hide overlay chrome.
+ * Two snaps: full (expanded) and half (default). onSnap reports the active snap.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -38,26 +34,23 @@ interface Props {
   contentContainerStyle?: object;
   snapFull?: number;
   snapHalf?: number;
-  snapPeek?: number;
   onSnap?: (snap: SnapName) => void;
 }
 
 export function DraggableSheet({
   children,
   contentContainerStyle,
-  snapFull = 0.08,
-  snapHalf = 0.5,
-  snapPeek = 0.82,
+  snapFull = 0.06,
+  snapHalf = 0.48,
   onSnap,
 }: Props) {
   const FULL = Math.round(SCREEN_H * snapFull);
   const HALF = Math.round(SCREEN_H * snapHalf);
-  const PEEK = Math.round(SCREEN_H * snapPeek);
 
   const translateY = useRef(new Animated.Value(HALF)).current;
   const restY = useRef(HALF);
   const snapRef = useRef<SnapName>('half');
-  const scrollY = useRef(0);            // current inner scroll offset
+  const scrollY = useRef(0);
   const [scrollEnabled, setScrollEnabled] = useState(true);
 
   const snapTo = (to: number, name: SnapName) => {
@@ -65,9 +58,7 @@ export function DraggableSheet({
     snapRef.current = name;
     onSnap?.(name);
     Animated.spring(translateY, {
-      toValue: to,
-      useNativeDriver: true,
-      damping: 24, stiffness: 240, mass: 0.7,
+      toValue: to, useNativeDriver: true, damping: 24, stiffness: 240, mass: 0.7,
     }).start();
   };
 
@@ -79,54 +70,42 @@ export function DraggableSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const nearest = (y: number, vy: number): { to: number; name: SnapName } => {
-    const pts: { to: number; name: SnapName }[] = [
-      { to: FULL, name: 'full' }, { to: HALF, name: 'half' }, { to: PEEK, name: 'peek' },
-    ];
-    let target = y;
-    if (vy < -0.5) target = y - SCREEN_H * 0.3;
-    else if (vy > 0.5) target = y + SCREEN_H * 0.3;
-    return pts.reduce((a, b) => (Math.abs(b.to - target) < Math.abs(a.to - target) ? b : a));
-  };
-
   const pan = useMemo(
     () =>
       PanResponder.create({
-        // Decide per-gesture whether WE drag the sheet or let the ScrollView scroll.
+        // Decide, per gesture, whether the sheet drags or the body scrolls.
         onMoveShouldSetPanResponder: (_e, g) => {
-          const vertical = Math.abs(g.dy) > Math.abs(g.dx) && Math.abs(g.dy) > 6;
+          const vertical = Math.abs(g.dy) > Math.abs(g.dx) && Math.abs(g.dy) > 8;
           if (!vertical) return false;
 
           const atFull = snapRef.current === 'full';
           const draggingDown = g.dy > 0;
           const atTop = scrollY.current <= 0;
 
-          // Not fully expanded → the sheet always moves (there's nothing above to
-          // scroll into yet).
+          // Half → any vertical drag moves the sheet.
           if (!atFull) return true;
-
-          // Fully expanded → only hijack for a pull-DOWN that starts at the very
-          // top of the content; otherwise let the list scroll.
+          // Full → only hijack a pull-DOWN that starts at the very top; else scroll.
           return draggingDown && atTop;
         },
-        onPanResponderGrant: () => {
-          // Freeze the scroll while we're dragging the sheet.
-          setScrollEnabled(false);
-        },
+        onPanResponderGrant: () => setScrollEnabled(false),
         onPanResponderMove: (_e, g) => {
-          const next = Math.min(PEEK, Math.max(FULL, restY.current + g.dy));
+          const next = Math.min(HALF, Math.max(FULL, restY.current + g.dy));
           translateY.setValue(next);
         },
         onPanResponderRelease: (_e, g) => {
           const landed = restY.current + g.dy;
-          const { to, name } = nearest(landed, g.vy);
-          snapTo(to, name);
+          const mid = (FULL + HALF) / 2;
+          let toFull: boolean;
+          if (g.vy < -0.4) toFull = true;
+          else if (g.vy > 0.4) toFull = false;
+          else toFull = landed < mid;
+          snapTo(toFull ? FULL : HALF, toFull ? 'full' : 'half');
           setScrollEnabled(true);
         },
         onPanResponderTerminate: () => setScrollEnabled(true),
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [FULL, HALF, PEEK],
+    [FULL, HALF],
   );
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -166,6 +145,6 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   header: { height: 30, alignItems: 'center', justifyContent: 'center' },
-  handle: { width: 44, height: 5, borderRadius: 3, backgroundColor: colors.border },
+  handle: { width: 48, height: 5, borderRadius: 3, backgroundColor: colors.border },
   body: { flex: 1 },
 });
