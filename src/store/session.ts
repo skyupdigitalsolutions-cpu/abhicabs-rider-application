@@ -120,6 +120,13 @@ export function initSessionBridge(): void {
     onTokensRefreshed: async (accessToken, refreshToken) => {
       accessTokenRef = accessToken;
       await secureStore.setRefreshToken(refreshToken);
+      // A real access token now exists. Point the realtime socket at it and
+      // (re)connect — this covers the cold-start case where the socket couldn't
+      // authenticate yet, and any later token rotation. Dynamically imported so
+      // socket.io stays off the cold-start bundle path.
+      import('../realtime/socket')
+        .then(({ syncSocketAuth }) => syncSocketAuth())
+        .catch(() => {});
     },
     onSessionInvalid: async () => {
       accessTokenRef = null;

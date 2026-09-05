@@ -1,13 +1,13 @@
 /**
  * src/features/auth/screens/RegisterScreen.tsx
  *
- * Account creation. Collects the four fields the backend requires (name, email,
- * phone, password) and validates them against the SAME rules the server enforces
- * so the user sees problems inline instead of as a round-trip 400.
+ * Account creation. Collects the three fields the backend requires (name, email,
+ * phone) and validates them against the SAME rules the server enforces so the
+ * user sees problems inline instead of as a round-trip 400.
  *
- * On success we do NOT sign the user in. The product flow is register -> OTP
- * login: we route to the Login screen with the phone pre-filled, so the user
- * confirms the number they'll sign in with going forward.
+ * Passwordless: there is no password here. The product flow is register -> OTP
+ * login. On success we route to the Login screen with the phone pre-filled, so
+ * the user confirms the number they'll sign in with going forward.
  */
 
 import { useState } from 'react';
@@ -25,13 +25,6 @@ const RULES = {
   name: (v: string) => (v.trim().length >= 2 ? null : 'Enter your full name.'),
   email: (v: string) => (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()) ? null : 'Enter a valid email address.'),
   phone: (v: string) => (/^\d{10}$/.test(v) ? null : 'Enter a 10-digit mobile number.'),
-  password: (v: string) => {
-    if (v.length < 8) return 'At least 8 characters.';
-    if (!/[a-z]/.test(v)) return 'Include a lowercase letter.';
-    if (!/[A-Z]/.test(v)) return 'Include an uppercase letter.';
-    if (!/[0-9]/.test(v)) return 'Include a number.';
-    return null;
-  },
 };
 
 function serverError(err: unknown): string {
@@ -48,8 +41,6 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPw, setShowPw] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
   const register = useRegister();
@@ -58,18 +49,17 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
     name: RULES.name(name),
     email: RULES.email(email),
     phone: RULES.phone(phone),
-    password: RULES.password(password),
   };
-  const formValid = !errors.name && !errors.email && !errors.phone && !errors.password;
+  const formValid = !errors.name && !errors.email && !errors.phone;
 
   const markTouched = (k: string) => setTouched((t) => ({ ...t, [k]: true }));
 
   async function onSubmit() {
-    setTouched({ name: true, email: true, phone: true, password: true });
+    setTouched({ name: true, email: true, phone: true });
     if (!formValid) return;
 
     register.mutate(
-      { name: name.trim(), email: email.trim(), phone, password },
+      { name: name.trim(), email: email.trim(), phone },
       {
         onSuccess: () => {
           // Registered — now sign in by OTP, with the phone pre-filled.
@@ -124,31 +114,10 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
               maxLength={10}
             />
           </View>
-          {touched.phone && errors.phone ? <Text style={styles.errorText}>{errors.phone}</Text> : null}
-        </View>
-
-        {/* Password with show/hide */}
-        <View style={styles.fieldWrap}>
-          <Text style={styles.label}>Password</Text>
-          <View style={[styles.phoneRow, touched.password && errors.password ? styles.inputError : null]}>
-            <TextInput
-              style={styles.phoneInput}
-              value={password}
-              onChangeText={setPassword}
-              onBlur={() => markTouched('password')}
-              placeholder="Create a password"
-              placeholderTextColor={colors.textMuted}
-              secureTextEntry={!showPw}
-              autoCapitalize="none"
-            />
-            <Pressable onPress={() => setShowPw((s) => !s)} hitSlop={8}>
-              <Text style={styles.showToggle}>{showPw ? 'Hide' : 'Show'}</Text>
-            </Pressable>
-          </View>
-          {touched.password && errors.password ? (
-            <Text style={styles.errorText}>{errors.password}</Text>
+          {touched.phone && errors.phone ? (
+            <Text style={styles.errorText}>{errors.phone}</Text>
           ) : (
-            <Text style={styles.hint}>8+ chars, with an uppercase letter and a number.</Text>
+            <Text style={styles.hint}>We'll send a one-time code to this number to sign you in.</Text>
           )}
         </View>
 
@@ -232,7 +201,6 @@ const styles = StyleSheet.create({
   },
   prefix: { ...type.body, color: colors.textMuted, marginRight: spacing.sm },
   phoneInput: { ...type.body, color: colors.text, flex: 1, paddingVertical: spacing.lg },
-  showToggle: { ...type.label, color: colors.primary },
 
   errorText: { ...type.caption, color: colors.danger },
   hint: { ...type.caption, color: colors.textMuted },

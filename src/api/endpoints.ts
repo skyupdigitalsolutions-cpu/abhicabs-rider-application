@@ -35,7 +35,7 @@ export const authApi = {
   loginPassword: (email: string, password: string) =>
     http.post<AuthResult>('/auth/login', { email, password }, { auth: false }),
 
-  register: (input: { name: string; email: string; password: string; phone: string }) =>
+  register: (input: { name: string; email: string; phone: string }) =>
     http.post<AuthResult>('/auth/register', input, { auth: false }),
 
   me: () => http.get<{ user: AuthUser; permissions: string[] }>('/auth/me'),

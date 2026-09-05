@@ -11,7 +11,7 @@ import type { AuthResult } from '../../types/domain';
  */
 export function useRegister() {
   return useMutation({
-    mutationFn: (input: { name: string; email: string; password: string; phone: string }) =>
+    mutationFn: (input: { name: string; email: string; phone: string }) =>
       authApi.register(input),
   });
 }

@@ -27,12 +27,30 @@ const watched = new Set<string>();
 
 /* ------------------------------- Connection -------------------------------- */
 
-export function connectSocket(): Socket {
+export function connectSocket(): Socket | null {
   if (socket?.connected) return socket;
+
+  const token = getAccessTokenSnapshot();
+  if (!token) {
+    // No access token yet. This happens on a cold start: bootstrap() flips the
+    // app to "authed" on the cached user while the refresh token is still being
+    // exchanged for an access token in the BACKGROUND. Opening a socket now just
+    // fails the handshake with AUTH_REQUIRED, so we don't. syncSocketAuth() —
+    // called from the session layer the instant a token is minted — connects us.
+    return socket;
+  }
+
+  if (socket) {
+    // A socket object exists but is disconnected — reuse it with the live token
+    // instead of stacking a second connection.
+    socket.auth = { token };
+    socket.connect();
+    return socket;
+  }
 
   socket = io(env.socketUrl, {
     transports: ['websocket'], // skip long-polling on mobile
-    auth: { token: getAccessTokenSnapshot() ?? '' },
+    auth: { token },
     reconnection: true,
     reconnectionAttempts: Infinity,
     reconnectionDelay: 1_000,
@@ -63,11 +81,26 @@ export function disconnectSocket(): void {
   watched.clear();
 }
 
+/**
+ * Point the socket at the CURRENT access token and make sure it's connected.
+ * Safe to call anytime, from anywhere. This is what closes the cold-start gap:
+ * it's invoked from the session layer every time a token is minted or rotated
+ * (login, cold-start refresh, transparent refresh), so a socket that couldn't
+ * connect yet (no token) gets created, and a live socket carrying a stale token
+ * gets reconnected with the fresh one.
+ */
+export function syncSocketAuth(): void {
+  const token = getAccessTokenSnapshot();
+  if (!token) return;                 // nothing to authenticate with yet
+  if (!socket) { connectSocket(); return; } // not created yet → create with the token
+  socket.auth = { token };
+  if (socket.connected) socket.disconnect().connect();
+  else socket.connect();
+}
+
 /** Reconnect with the current (possibly rotated) access token. */
 export function reauthSocket(): void {
-  if (!socket) return;
-  socket.auth = { token: getAccessTokenSnapshot() ?? '' };
-  socket.disconnect().connect();
+  syncSocketAuth();
 }
 
 /* --------------------------------- Watching -------------------------------- */
