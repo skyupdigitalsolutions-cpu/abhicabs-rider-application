@@ -10,7 +10,7 @@
  *   Airport — pickup + drop, flight number
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useBookingDraft } from '../../../store/bookingDraft';
 import { useRentalPackages } from '../api';
@@ -121,6 +121,8 @@ export function AirportMode({ navigation }: { navigation: Nav }) {
     setTripType, setPickupAt, setFlightNumber,
   } = useBookingDraft();
 
+  const flightInputRef = useRef<TextInput>(null);
+
   useEffect(() => {
     if (useBookingDraft.getState().tripType !== 'AIRPORT') setTripType('AIRPORT');
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -145,14 +147,27 @@ export function AirportMode({ navigation }: { navigation: Nav }) {
 
       <View style={styles.flightCard}>
         <Text style={styles.flightLabel}>Flight number (optional)</Text>
-        <TextInput
-          style={styles.flightInput}
-          placeholder="e.g. 6E 2345"
-          placeholderTextColor={colors.textMuted}
-          autoCapitalize="characters"
-          value={flightNumber ?? ''}
-          onChangeText={(t) => setFlightNumber(t || null)}
-        />
+        {/*
+          Keep the native TextInput OUT of the touch path so a vertical drag
+          over it still moves the sheet (a raw TextInput swallows the gesture,
+          which is why the Airport tab wasn't draggable from here). The plain
+          Pressable behaves like every other element in the sheet — the sheet's
+          move-capture can steal a drag from it — and a tap just focuses the
+          field via the ref.
+        */}
+        <Pressable onPress={() => flightInputRef.current?.focus()}>
+          <View pointerEvents="none">
+            <TextInput
+              ref={flightInputRef}
+              style={styles.flightInput}
+              placeholder="e.g. 6E 2345"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="characters"
+              value={flightNumber ?? ''}
+              onChangeText={(t) => setFlightNumber(t || null)}
+            />
+          </View>
+        </Pressable>
       </View>
 
       <DateRow>

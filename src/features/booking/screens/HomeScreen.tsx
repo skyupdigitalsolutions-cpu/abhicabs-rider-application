@@ -108,9 +108,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       {!picking ? (
         <>
           <DraggableSheet onSnap={setSheetSnap} contentContainerStyle={styles.sheetContent}>
-            <View style={styles.brandStrip}>
-              <Text style={styles.brandText}>AbhiCabs</Text>
-            </View>
+            
 
             {/* Set-pickup-on-map entry */}
             <Pressable style={styles.mapPickBtn} onPress={startPicking}>
