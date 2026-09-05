@@ -36,8 +36,6 @@ function errorMessage(err: unknown): string {
     switch (err.code) {
       case 'INVALID_OTP':
         return "That code didn't match. Check it and try again.";
-      case 'NOT_REGISTERED':
-        return 'No account found for this number. Tap "Create an account" below to register first.';
       case 'RATE_LIMITED':
         return 'Too many attempts. Wait a minute, then try again.';
       case 'SERVER_BUSY':
