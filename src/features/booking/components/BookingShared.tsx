@@ -81,6 +81,45 @@ export function PlaceRow(props: {
   );
 }
 
+/** An intermediate stop row: tap to set/change, ✕ to remove. */
+export function StopRow(props: {
+  label: string;
+  value: string | null;
+  onPress: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <View style={styles.field}>
+      <View style={[styles.dot, styles.dotStop]} />
+      <Pressable style={{ flex: 1 }} onPress={props.onPress}>
+        <Text style={styles.fieldLabel}>{props.label}</Text>
+        <Text style={[styles.fieldValue, !props.value && styles.fieldPlaceholder]} numberOfLines={1}>
+          {props.value ?? 'Add stop'}
+        </Text>
+      </Pressable>
+      <Pressable onPress={props.onRemove} hitSlop={10}>
+        <Text style={styles.removeStop}>✕</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+/** "Add stop" affordance shown inside the route card. */
+export function AddStopButton(props: { onPress: () => void; disabled?: boolean }) {
+  return (
+    <Pressable
+      style={styles.addStop}
+      onPress={props.onPress}
+      disabled={props.disabled}
+      hitSlop={6}
+    >
+      <Text style={[styles.addStopText, props.disabled && styles.addStopDisabled]}>
+        ＋ Add stop
+      </Text>
+    </Pressable>
+  );
+}
+
 export function RouteCard(props: { children: React.ReactNode }) {
   return <View style={styles.routeCard}>{props.children}</View>;
 }
@@ -181,6 +220,11 @@ const styles = StyleSheet.create({
   dot: { width: 10, height: 10, borderRadius: 5, marginRight: spacing.md },
   dotPickup: { backgroundColor: colors.primary },
   dotDrop: { backgroundColor: colors.danger },
+  dotStop: { backgroundColor: colors.textMuted },
+  removeStop: { ...type.label, color: colors.textMuted, fontSize: 16, paddingHorizontal: spacing.sm },
+  addStop: { paddingVertical: spacing.sm, marginLeft: 22 },
+  addStopText: { ...type.label, color: colors.primary },
+  addStopDisabled: { color: colors.textMuted },
   fieldLabel: { ...type.caption, color: colors.textMuted },
   fieldValue: { ...type.body, color: colors.text },
   fieldPlaceholder: { color: colors.textMuted },

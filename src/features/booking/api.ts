@@ -68,12 +68,15 @@ function routeKey(args: {
   returnAt: string | null;
   rentalPackageId?: number | null;
   rentalHours?: number | null;
+  stops?: ChosenPlace[];
 }): string {
   const r = (n: number) => n.toFixed(4);
+  const stopsSig = (args.stops ?? []).map((s) => `${r(s.lat)},${r(s.lng)}`).join('>');
   return [
     args.cityId, args.tripType,
     r(args.pickup.lat), r(args.pickup.lng),
     r(args.drop.lat), r(args.drop.lng),
+    stopsSig || '-',
     args.pickupAt, args.returnAt ?? '-',
     args.rentalPackageId ?? '-', args.rentalHours ?? '-',
   ].join('|');
@@ -93,6 +96,7 @@ export function useFareOptions(args: {
   rentalPackageId?: number | null;
   rentalHours?: number | null;
   flightNumber?: string | null;
+  stops?: ChosenPlace[];
 }) {
   const isHourly = args.tripType === 'HOURLY';
   const ready = Boolean(
@@ -126,6 +130,9 @@ export function useFareOptions(args: {
           tripType: args.tripType,
           pickup: { lat: p.lat, lng: p.lng },
           drop: { lat: d.lat, lng: d.lng },
+          ...(args.stops && args.stops.length && !isHourly
+            ? { stops: args.stops.map((s) => ({ lat: s.lat, lng: s.lng })) }
+            : {}),
           pickupAt: args.pickupAt,
           ...(args.returnAt ? { returnAt: args.returnAt } : {}),
           ...(args.rentalPackageId ? { rentalPackageId: args.rentalPackageId } : {}),

@@ -2,9 +2,9 @@
  * src/store/bookingDraft.ts
  *
  * The in-progress booking the user is assembling across screens: pickup, drop,
- * when, trip type, city. This is EPHEMERAL FLOW STATE, not server state, so it
- * belongs in a store rather than React Query — it has no server representation
- * until the booking is actually created.
+ * intermediate stops, when, trip type, city. This is EPHEMERAL FLOW STATE, not
+ * server state, so it belongs in a store rather than React Query — it has no
+ * server representation until the booking is actually created.
  *
  * Why a store and not route params: the flow spans several screens (home ->
  * search -> options -> confirm), some fields are set on different screens, and
@@ -18,11 +18,16 @@ import { create } from 'zustand';
 import { DEFAULT_CITY } from '../config/catalog';
 import type { ChosenPlace, TripType } from '../types/domain';
 
+/** UI cap on intermediate stops. The backend allows up to 10. */
+export const MAX_STOPS = 5;
+
 interface BookingDraftState {
   cityId: number;
   tripType: TripType;
   pickup: ChosenPlace | null;
   drop: ChosenPlace | null;
+  // Ordered intermediate stops between pickup and drop (Ride only).
+  stops: ChosenPlace[];
   pickupAt: string; // ISO; defaults to "soon" and is editable later
   returnAt: string | null;
 
@@ -34,6 +39,10 @@ interface BookingDraftState {
 
   setPickup: (place: ChosenPlace | null) => void;
   setDrop: (place: ChosenPlace | null) => void;
+  /** Set the stop at `index`, or append when `index` is at/after the end. */
+  upsertStop: (index: number, place: ChosenPlace) => void;
+  /** Remove the stop at `index`. */
+  removeStop: (index: number) => void;
   setTripType: (t: TripType) => void;
   setCity: (cityId: number) => void;
   setPickupAt: (iso: string) => void;
@@ -55,6 +64,7 @@ export const useBookingDraft = create<BookingDraftState>((set, get) => ({
   tripType: 'ONE_WAY',
   pickup: null,
   drop: null,
+  stops: [],
   pickupAt: defaultPickupAt(),
   returnAt: null,
   rentalPackageId: null,
@@ -63,8 +73,22 @@ export const useBookingDraft = create<BookingDraftState>((set, get) => ({
 
   setPickup: (place) => set({ pickup: place }),
   setDrop: (place) => set({ drop: place }),
+
+  upsertStop: (index, place) =>
+    set((s) => {
+      const stops = [...s.stops];
+      if (index >= stops.length) {
+        if (stops.length >= MAX_STOPS) return {}; // ignore beyond the cap
+        stops.push(place);
+      } else {
+        stops[index] = place;
+      }
+      return { stops };
+    }),
+  removeStop: (index) => set((s) => ({ stops: s.stops.filter((_, i) => i !== index) })),
+
   // Switching trip type clears the fields that only make sense for the old type,
-  // so a leftover returnAt/package can't ride along into an incompatible quote.
+  // so a leftover returnAt/package/stop can't ride along into an incompatible quote.
   setTripType: (t) =>
     set({
       tripType: t,
@@ -72,6 +96,8 @@ export const useBookingDraft = create<BookingDraftState>((set, get) => ({
       rentalPackageId: t === 'HOURLY' ? get().rentalPackageId : null,
       rentalHours: t === 'HOURLY' ? get().rentalHours : null,
       flightNumber: t === 'AIRPORT' ? get().flightNumber : null,
+      // HOURLY has no fixed drop, so stops are meaningless there.
+      stops: t === 'HOURLY' ? [] : get().stops,
     }),
   setCity: (cityId) => set({ cityId }),
   setPickupAt: (iso) => set({ pickupAt: iso }),
@@ -88,6 +114,7 @@ export const useBookingDraft = create<BookingDraftState>((set, get) => ({
       tripType: 'ONE_WAY',
       pickup: null,
       drop: null,
+      stops: [],
       pickupAt: defaultPickupAt(),
       returnAt: null,
       rentalPackageId: null,

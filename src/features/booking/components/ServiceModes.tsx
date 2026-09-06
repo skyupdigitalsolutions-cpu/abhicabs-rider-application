@@ -12,11 +12,11 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useBookingDraft } from '../../../store/bookingDraft';
+import { useBookingDraft, MAX_STOPS } from '../../../store/bookingDraft';
 import { useRentalPackages } from '../api';
 import type { TripType, RentalPackage } from '../../../types/domain';
 import {
-  WhereToBar, RouteCard, PlaceRow, Divider, DateRow, DateCard, DateSpacer, SearchButton,
+  WhereToBar, RouteCard, PlaceRow, StopRow, AddStopButton, Divider, DateRow, DateCard, DateSpacer, SearchButton,
 } from './BookingShared';
 import { colors, radius, spacing, type } from '../../../theme';
 
@@ -26,8 +26,8 @@ type Nav = { navigate: (screen: string, params?: object) => void };
 
 export function RideMode({ navigation }: { navigation: Nav }) {
   const {
-    pickup, drop, tripType, pickupAt, returnAt,
-    setTripType, setPickupAt, setReturnAt,
+    pickup, drop, stops, tripType, pickupAt, returnAt,
+    setTripType, setPickupAt, setReturnAt, removeStop,
   } = useBookingDraft();
 
   const showReturn = tripType === 'ROUND_TRIP';
@@ -50,8 +50,23 @@ export function RideMode({ navigation }: { navigation: Nav }) {
         <PlaceRow kind="pickup" label="Pickup" value={pickup?.label ?? null} placeholder="Add pickup point"
           onPress={() => navigation.navigate('PlaceSearch', { field: 'pickup' })} />
         <Divider />
+        {stops.map((s, i) => (
+          <View key={`stop-${i}`}>
+            <StopRow
+              label={`Stop ${i + 1}`}
+              value={s.label}
+              onPress={() => navigation.navigate('PlaceSearch', { field: 'stop', index: i })}
+              onRemove={() => removeStop(i)}
+            />
+            <Divider />
+          </View>
+        ))}
         <PlaceRow kind="drop" label="Drop" value={drop?.label ?? null} placeholder="Where to?"
           onPress={() => navigation.navigate('PlaceSearch', { field: 'drop' })} />
+        <AddStopButton
+          disabled={stops.length >= MAX_STOPS}
+          onPress={() => navigation.navigate('PlaceSearch', { field: 'stop', index: stops.length })}
+        />
       </RouteCard>
 
       <DateRow>

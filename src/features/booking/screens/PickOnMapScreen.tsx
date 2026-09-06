@@ -28,10 +28,13 @@ import type { PickOnMapScreenProps } from '../../../navigation/types';
 import { colors, radius, spacing, type } from '../../../theme';
 
 export function PickOnMapScreen({ route, navigation }: PickOnMapScreenProps) {
-  const { field } = route.params;
+  const { field, index } = route.params;
   const setPickup = useBookingDraft((s) => s.setPickup);
   const setDrop = useBookingDraft((s) => s.setDrop);
-  const existing = useBookingDraft((s) => (field === 'pickup' ? s.pickup : s.drop));
+  const upsertStop = useBookingDraft((s) => s.upsertStop);
+  const existing = useBookingDraft((s) =>
+    field === 'pickup' ? s.pickup : field === 'drop' ? s.drop : s.stops[index ?? 0] ?? null,
+  );
 
   // Start over the existing choice if any, else the city centre.
   const initial: Region = {
@@ -79,7 +82,8 @@ export function PickOnMapScreen({ route, navigation }: PickOnMapScreenProps) {
       placeId: null,
     };
     if (field === 'pickup') setPickup(place);
-    else setDrop(place);
+    else if (field === 'drop') setDrop(place);
+    else upsertStop(index ?? 0, place);
     navigation.goBack();
   };
 
@@ -104,7 +108,7 @@ export function PickOnMapScreen({ route, navigation }: PickOnMapScreenProps) {
       {/* Bottom sheet: current address + confirm */}
       <View style={styles.sheet}>
         <Text style={styles.sheetLabel}>
-          {field === 'pickup' ? 'Set pickup point' : 'Set destination'}
+          {field === 'pickup' ? 'Set pickup point' : field === 'stop' ? 'Set stop' : 'Set destination'}
         </Text>
         <View style={styles.addrRow}>
           {looking ? (
@@ -121,7 +125,7 @@ export function PickOnMapScreen({ route, navigation }: PickOnMapScreenProps) {
           disabled={looking || confirming}
         >
           <Text style={styles.confirmText}>
-            {field === 'pickup' ? 'Confirm pickup' : 'Confirm destination'}
+            {field === 'pickup' ? 'Confirm pickup' : field === 'stop' ? 'Confirm stop' : 'Confirm destination'}
           </Text>
         </Pressable>
       </View>

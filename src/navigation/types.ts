@@ -9,13 +9,14 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 /** Which end of the trip a place-search is choosing. */
-export type SearchField = 'pickup' | 'drop';
+export type SearchField = 'pickup' | 'drop' | 'stop';
 
 /** The authenticated app stack. */
 export type AppStackParamList = {
   Home: undefined;
-  PlaceSearch: { field: SearchField };
-  PickOnMap: { field: SearchField };
+  // `index` is used only when field === 'stop' (which stop to set/append).
+  PlaceSearch: { field: SearchField; index?: number };
+  PickOnMap: { field: SearchField; index?: number };
   FareOptions: undefined;
   Trip: { bookingId: string };
   Trips: undefined;

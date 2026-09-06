@@ -32,9 +32,10 @@ import type { PlaceSuggestion } from '../../../types/domain';
 import { colors, radius, spacing, type } from '../../../theme';
 
 export function PlaceSearchScreen({ route, navigation }: PlaceSearchScreenProps) {
-  const { field } = route.params;
+  const { field, index } = route.params;
   const setPickup = useBookingDraft((s) => s.setPickup);
   const setDrop = useBookingDraft((s) => s.setDrop);
+  const upsertStop = useBookingDraft((s) => s.upsertStop);
 
   const [term, setTerm] = useState('');
   const debounced = useDebouncedValue(term, 300);
@@ -50,7 +51,8 @@ export function PlaceSearchScreen({ route, navigation }: PlaceSearchScreenProps)
     try {
       const place = await resolveSuggestion(s);
       if (field === 'pickup') setPickup(place);
-      else setDrop(place);
+      else if (field === 'drop') setDrop(place);
+      else upsertStop(index ?? 0, place);
       navigation.goBack();
     } catch (err) {
       setResolvingId(null);
@@ -69,7 +71,7 @@ export function PlaceSearchScreen({ route, navigation }: PlaceSearchScreenProps)
           style={styles.input}
           value={term}
           onChangeText={setTerm}
-          placeholder={field === 'pickup' ? 'Search pickup point' : 'Search destination'}
+          placeholder={field === 'pickup' ? 'Search pickup point' : field === 'stop' ? 'Search stop' : 'Search destination'}
           placeholderTextColor={colors.textMuted}
           autoFocus
           returnKeyType="search"
@@ -83,7 +85,7 @@ export function PlaceSearchScreen({ route, navigation }: PlaceSearchScreenProps)
 
       <Pressable
         style={styles.mapLink}
-        onPress={() => navigation.replace('PickOnMap', { field })}
+        onPress={() => navigation.replace('PickOnMap', { field, index })}
       >
         <Text style={styles.mapLinkText}>📍  Choose on map instead</Text>
       </Pressable>

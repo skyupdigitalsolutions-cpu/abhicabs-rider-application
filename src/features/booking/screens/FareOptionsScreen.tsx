@@ -41,6 +41,7 @@ export function FareOptionsScreen({ navigation }: FareOptionsScreenProps) {
     tripType: draft.tripType,
     pickup: draft.pickup,
     drop: draft.drop,
+    stops: draft.stops,
     pickupAt: draft.pickupAt,
     returnAt: draft.returnAt,
     rentalPackageId: draft.rentalPackageId,
@@ -88,6 +89,9 @@ export function FareOptionsScreen({ navigation }: FareOptionsScreenProps) {
         pickup: { lat: draft.pickup.lat, lng: draft.pickup.lng, address: draft.pickup.label },
         ...(draft.drop
           ? { drop: { lat: draft.drop.lat, lng: draft.drop.lng, address: draft.drop.label } }
+          : {}),
+        ...(draft.stops.length
+          ? { stops: draft.stops.map((s) => ({ lat: s.lat, lng: s.lng, address: s.label })) }
           : {}),
         pickupAt,
         ...(returnAt ? { returnAt } : {}),

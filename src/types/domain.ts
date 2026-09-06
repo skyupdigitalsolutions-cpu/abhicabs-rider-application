@@ -145,6 +145,7 @@ export interface FareEstimateRequest {
   tripType: TripType;
   pickup: LatLng;
   drop?: LatLng | null;
+  stops?: LatLng[];
   pickupAt: string; // ISO
   returnAt?: string; // ISO, ROUND_TRIP only
   // HOURLY: a fixed package id OR a flexible hours commitment.
@@ -269,6 +270,8 @@ export interface CreateBookingRequest {
   pickup: LatLng & { address?: string };
   // Optional: local (hourly) rentals have no drop.
   drop?: (LatLng & { address?: string }) | null;
+  // Ordered intermediate stops between pickup and drop.
+  stops?: (LatLng & { address?: string })[];
   pickupAt: string;
   returnAt?: string;
   scheduled?: boolean;
