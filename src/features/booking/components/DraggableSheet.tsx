@@ -44,6 +44,15 @@ interface Props {
   snapFull?: number;
   snapHalf?: number;
   onSnap?: (snap: SnapName) => void;
+  /**
+   * Height of the sheet's own container, if it's not the full device window
+   * (e.g. a screen with a visible header eating into the space). Snap
+   * fractions are computed against this instead of the raw device height, so
+   * the sheet's "half" position actually lands at half of what's visible.
+   * Defaults to the full window height (correct when there's no header, as
+   * on the home screen).
+   */
+  containerHeight?: number;
 }
 
 export function DraggableSheet({
@@ -52,9 +61,10 @@ export function DraggableSheet({
   snapFull = 0.06,
   snapHalf = 0.48,
   onSnap,
+  containerHeight = SCREEN_H,
 }: Props) {
-  const FULL = Math.round(SCREEN_H * snapFull);
-  const HALF = Math.round(SCREEN_H * snapHalf);
+  const FULL = Math.round(containerHeight * snapFull);
+  const HALF = Math.round(containerHeight * snapHalf);
 
   const translateY = useRef(new Animated.Value(HALF)).current;
   const restY = useRef(HALF);
@@ -155,7 +165,7 @@ export function DraggableSheet({
 
   return (
     <Animated.View
-      style={[styles.sheet, { height: SCREEN_H - FULL + 40, transform: [{ translateY }] }]}
+      style={[styles.sheet, { height: containerHeight - FULL + 40, transform: [{ translateY }] }]}
       {...pan.panHandlers}
     >
       <View style={styles.header}>

@@ -85,7 +85,7 @@ function AuthedNavigator() {
       <AppStack.Screen name="PlaceSearch" component={PlaceSearchScreen} options={{ title: 'Search', presentation: 'card' }} />
       <AppStack.Screen name="PickOnMap" component={PickOnMapScreen} options={{ title: 'Pick on map' }} />
       <AppStack.Screen name="FareOptions" component={FareOptionsScreen} options={{ title: 'Choose ride' }} />
-      <AppStack.Screen name="Trip" component={TripScreen} options={{ title: 'Your trip', headerBackVisible: true }} />
+      <AppStack.Screen name="Trip" component={TripScreen} options={{ headerShown: false }} />
       <AppStack.Screen name="Trips" component={TripsScreen} options={{ title: 'Your trips' }} />
       <AppStack.Screen name="Profile" component={ProfileScreen} options={{ title: 'Account' }} />
     </AppStack.Navigator>

@@ -11,10 +11,14 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View, Text, Platform, Pressable } from 'react-native';
+import { StatusBar, StyleSheet, View, Text, Platform, Pressable } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { fareApi } from '../../../api/endpoints';
 import { radius, spacing, type } from '../../../theme';
+
+/** Clears the status bar AND the back-button/title row TripScreen draws on
+ * top of this map when fullBleed — sits just below that row, not behind it. */
+const TOP_INSET = (StatusBar.currentHeight ?? 40) + 60;
 
 export interface LatLng {
   lat: number;
@@ -93,9 +97,13 @@ interface Props {
   /** Start in tilted 3D (buildings in perspective). User can toggle. */
   threeD?: boolean;
   height?: number;
+  /** Edge-to-edge, no border/radius — for use as a full-screen background layer. */
+  fullBleed?: boolean;
 }
 
-export function TripMap({ pickup, drop, driver, live = false, threeD = true, height = 260 }: Props) {
+export function TripMap({
+  pickup, drop, driver, live = false, threeD = true, height = 260, fullBleed = false,
+}: Props) {
   const mapRef = useRef<MapView>(null);
   // 3D is on by default for live trips; user can flatten with the toggle.
   const [tilted, setTilted] = useState(threeD);
@@ -189,7 +197,7 @@ export function TripMap({ pickup, drop, driver, live = false, threeD = true, hei
   const roadCoords = (routePts && routePts.length >= 2 ? routePts : [pickup, drop]).map(toCoord);
 
   return (
-    <View style={[styles.wrap, { height }]}>
+    <View style={[styles.wrap, fullBleed && styles.fullBleed, { height }]}>
       <MapView
         ref={mapRef}
         style={StyleSheet.absoluteFill}
@@ -251,13 +259,13 @@ export function TripMap({ pickup, drop, driver, live = false, threeD = true, hei
       </MapView>
 
       {!driver && live ? (
-        <View style={styles.badge}>
+        <View style={[styles.badge, fullBleed && { top: TOP_INSET }]}>
           <Text style={styles.badgeText}>Waiting for driver location…</Text>
         </View>
       ) : null}
 
       {/* 2D / 3D toggle */}
-      <Pressable style={styles.toggle} onPress={() => setTilted((t) => !t)}>
+      <Pressable style={[styles.toggle, fullBleed && { top: TOP_INSET }]} onPress={() => setTilted((t) => !t)}>
         <Text style={styles.toggleText}>{tilted ? '2D' : '3D'}</Text>
       </Pressable>
     </View>
@@ -272,6 +280,7 @@ const styles = StyleSheet.create({
     borderColor: '#000000',
     backgroundColor: '#212121',
   },
+  fullBleed: { borderRadius: 0, borderWidth: 0 },
 
   // Pickup: bright dot inside a translucent ring.
   pickupRing: {

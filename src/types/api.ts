@@ -44,6 +44,7 @@ export type ApiErrorCode =
   | 'SERVER_BUSY' // 503, load shedding — carries Retry-After
   // auth
   | 'AUTH_REQUIRED'
+  | 'NO_TOKEN'
   | 'INVALID_TOKEN'
   | 'TOKEN_EXPIRED'
   | 'PERMISSION_DENIED'

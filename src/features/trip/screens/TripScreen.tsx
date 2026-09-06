@@ -14,14 +14,20 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View,
+  ActivityIndicator, Alert, Dimensions, Linking, Pressable, ScrollView, StatusBar, StyleSheet, Text, View,
 } from 'react-native';
 import { useTripSummary, useCancelTrip, usePayTrip } from '../api';
 import { TripMap } from '../components/TripMap';
+import { DraggableSheet, type SnapName } from '../../booking/components/DraggableSheet';
 import { isTerminal } from '../../../types/domain';
 import type { TripScreenProps } from '../../../navigation/types';
 import type { BookingStatus, BookingSummary } from '../../../types/domain';
 import { colors, radius, spacing, type } from '../../../theme';
+
+const { height: SCREEN_H } = Dimensions.get('window');
+
+/** Same offset formula the home screen uses for its floating top pills. */
+const TOP_OFFSET = (StatusBar.currentHeight ?? 40) + 20;
 
 /** The forward lifecycle we render as a timeline (terminal states handled apart). */
 const TIMELINE: { key: BookingStatus; label: string; caption: string }[] = [
@@ -46,10 +52,12 @@ export function TripScreen({ route, navigation }: TripScreenProps) {
   const pay = usePayTrip(bookingId);
   const [cancelling, setCancelling] = useState(false);
   const [paying, setPaying] = useState(false);
+  const [sheetSnap, setSheetSnap] = useState<SnapName>('half');
 
   if (isLoading && !data) {
     return (
       <View style={styles.center}>
+        <TopBar light={false} onBack={() => navigation.goBack()} />
         <ActivityIndicator color={colors.text} size="large" />
         <Text style={styles.centerText}>Loading your trip…</Text>
       </View>
@@ -58,6 +66,7 @@ export function TripScreen({ route, navigation }: TripScreenProps) {
   if (isError || !data) {
     return (
       <View style={styles.center}>
+        <TopBar light={false} onBack={() => navigation.goBack()} />
         <Text style={styles.centerText}>Couldn't load this trip.</Text>
         <Pressable onPress={() => refetch()} style={styles.retryBtn}>
           <Text style={styles.retryText}>Retry</Text>
@@ -101,8 +110,21 @@ export function TripScreen({ route, navigation }: TripScreenProps) {
     ]);
   };
 
-  return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
+  // Live trips (not terminal) with valid pickup/drop coords get the immersive,
+  // full-screen map — same treatment as the home screen. Coords arrive as
+  // strings from the API, so coerce before the finite check.
+  const pLat = Number(data.booking.pickupLat);
+  const pLng = Number(data.booking.pickupLng);
+  const dLat = Number(data.booking.dropLat);
+  const dLng = Number(data.booking.dropLng);
+  const hasCoords = [pLat, pLng, dLat, dLng].every(Number.isFinite);
+  const hasLiveMap = !terminal && hasCoords;
+
+  // Everything except the map itself — shared between the immersive layout
+  // (map behind a draggable sheet) and the plain fallback (terminal trips /
+  // missing coords), so the two layouts never drift apart.
+  const info = (
+    <>
       {/* Status header */}
       <View style={styles.header}>
         <StatusPill status={status} />
@@ -114,30 +136,6 @@ export function TripScreen({ route, navigation }: TripScreenProps) {
       ) : (
         <Timeline status={status} />
       )}
-
-      {/* Immersive map — live trips only. Shows pickup, drop, and the driver's
-          current position (once GPS pings arrive). Coords arrive as strings from
-          the API, so coerce before the finite check. */}
-      {(() => {
-        if (terminal) return null;
-        const pLat = Number(data.booking.pickupLat);
-        const pLng = Number(data.booking.pickupLng);
-        const dLat = Number(data.booking.dropLat);
-        const dLng = Number(data.booking.dropLng);
-        if (![pLat, pLng, dLat, dLng].every(Number.isFinite)) return null;
-        return (
-          <TripMap
-            pickup={{ lat: pLat, lng: pLng }}
-            drop={{ lat: dLat, lng: dLng }}
-            driver={
-              data.liveLocation
-                ? { lat: data.liveLocation.lat, lng: data.liveLocation.lng }
-                : null
-            }
-            live
-          />
-        );
-      })()}
 
       {/* Driver / vehicle card once allocated */}
       {data.allocation && !terminal ? (
@@ -222,7 +220,68 @@ export function TripScreen({ route, navigation }: TripScreenProps) {
           <Text style={styles.homeText}>Book another ride</Text>
         </Pressable>
       ) : null}
-    </ScrollView>
+    </>
+  );
+
+  // Immersive layout: full-screen map behind a draggable sheet — same
+  // composition as the home screen (SharedMap + DraggableSheet). No native
+  // header here (see App.tsx), so the map runs edge-to-edge exactly like
+  // the home screen, with our own transparent back button floating on top.
+  if (hasLiveMap) {
+    return (
+      <View style={styles.root}>
+        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+        <View style={styles.mapLayer}>
+          <TripMap
+            pickup={{ lat: pLat, lng: pLng }}
+            drop={{ lat: dLat, lng: dLng }}
+            driver={
+              data.liveLocation
+                ? { lat: data.liveLocation.lat, lng: data.liveLocation.lng }
+                : null
+            }
+            live
+            fullBleed
+            height={SCREEN_H}
+          />
+        </View>
+
+        {/* Hide the back button once the sheet is fully expanded, same as
+            the home screen hides its top pills — it would sit under the
+            sheet otherwise. */}
+        {sheetSnap !== 'full' ? (
+          <TopBar light onBack={() => navigation.goBack()} />
+        ) : null}
+
+        <DraggableSheet onSnap={setSheetSnap} contentContainerStyle={styles.sheetContent}>
+          {info}
+        </DraggableSheet>
+      </View>
+    );
+  }
+
+  // Fallback layout: terminal trips or missing coords — plain scroll, no map.
+  return (
+    <View style={styles.root}>
+      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+      <TopBar light={false} onBack={() => navigation.goBack()} />
+      <ScrollView style={styles.root} contentContainerStyle={styles.content}>
+        {info}
+      </ScrollView>
+    </View>
+  );
+}
+
+/** Transparent back button + title, floating over the content — no header, no
+ * background pill, just like the home screen's overlay pattern but bare. */
+function TopBar({ light, onBack }: { light: boolean; onBack: () => void }) {
+  return (
+    <View style={[styles.topOverlay, { top: TOP_OFFSET }]}>
+      <Pressable onPress={onBack} hitSlop={12} style={styles.backBtn}>
+        <Text style={[styles.backArrow, light ? styles.textLight : styles.textDark]}>←</Text>
+      </Pressable>
+      <Text style={[styles.topTitle, light ? styles.textLight : styles.textDark]}>Your trip</Text>
+    </View>
   );
 }
 
@@ -449,8 +508,20 @@ function timeAgo(iso: string): string {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.xl, gap: spacing.lg, paddingBottom: spacing.xxl },
+  content: { padding: spacing.xl, paddingTop: TOP_OFFSET + 52, gap: spacing.lg, paddingBottom: spacing.xxl + 56 },
+  mapLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  sheetContent: { padding: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.xxl + 56, gap: spacing.lg },
   center: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+
+  topOverlay: {
+    position: 'absolute', left: spacing.lg, right: spacing.lg, zIndex: 10,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+  },
+  backBtn: { padding: 4 },
+  backArrow: { fontSize: 26, fontWeight: '600', lineHeight: 28 },
+  topTitle: { ...type.title, fontSize: 18, fontWeight: '700' },
+  textLight: { color: '#FFFFFF' },
+  textDark: { color: colors.text },
   centerText: { ...type.body, color: colors.textMuted },
 
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

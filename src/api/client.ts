@@ -281,7 +281,10 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
       // --- 401: try exactly one transparent refresh, then replay once ---
       const isExpired =
         err.status === 401 &&
-        (err.code === 'TOKEN_EXPIRED' || err.code === 'AUTH_REQUIRED' || err.code === 'INVALID_TOKEN');
+        (err.code === 'TOKEN_EXPIRED' ||
+          err.code === 'AUTH_REQUIRED' ||
+          err.code === 'INVALID_TOKEN' ||
+          err.code === 'NO_TOKEN');
 
       if (isExpired && opts.auth !== false && !opts._isRetryAfterRefresh) {
         try {
