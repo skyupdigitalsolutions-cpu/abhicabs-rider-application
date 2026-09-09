@@ -14,7 +14,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Dimensions, Linking, Pressable, ScrollView, StatusBar, StyleSheet, Text, View,
+  ActivityIndicator, Alert, Dimensions, Linking, Modal, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { useTripSummary, useCancelTrip, usePayTrip } from '../api';
 import { TripMap } from '../components/TripMap';
@@ -53,6 +53,11 @@ export function TripScreen({ route, navigation }: TripScreenProps) {
   const [cancelling, setCancelling] = useState(false);
   const [paying, setPaying] = useState(false);
   const [sheetSnap, setSheetSnap] = useState<SnapName>('half');
+
+  // Cancellation reason capture (required by the backend).
+  const [reasonOpen, setReasonOpen] = useState(false);
+  const [chosenReason, setChosenReason] = useState<string | null>(null);
+  const [otherText, setOtherText] = useState('');
 
   if (isLoading && !data) {
     return (
@@ -97,18 +102,83 @@ export function TripScreen({ route, navigation }: TripScreenProps) {
     }
   };
 
+  const CANCEL_REASONS = [
+    'Plans changed',
+    'Booked by mistake',
+    'Driver is taking too long',
+    'Found another ride',
+    'Other',
+  ];
+
+  const resolvedReason =
+    chosenReason === 'Other' ? otherText.trim() : (chosenReason ?? '');
+  const reasonValid = resolvedReason.length >= 3;
+
   const onCancel = () => {
-    Alert.alert('Cancel this trip?', 'You may be charged a cancellation fee depending on timing.', [
-      { text: 'Keep trip', style: 'cancel' },
-      {
-        text: 'Cancel trip', style: 'destructive',
-        onPress: async () => {
-          setCancelling(true);
-          try { await cancel.mutateAsync(undefined); } catch { /* surfaced below */ } finally { setCancelling(false); }
-        },
-      },
-    ]);
+    setChosenReason(null);
+    setOtherText('');
+    setReasonOpen(true);
   };
+
+  const confirmCancel = async () => {
+    if (!reasonValid) return;
+    setReasonOpen(false);
+    setCancelling(true);
+    try {
+      await cancel.mutateAsync(resolvedReason);
+    } catch {
+      /* surfaced below */
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  const reasonModal = (
+    <Modal visible={reasonOpen} transparent animationType="fade" onRequestClose={() => setReasonOpen(false)}>
+      <Pressable style={styles.reasonBackdrop} onPress={() => setReasonOpen(false)}>
+        <Pressable style={styles.reasonSheet} onPress={(e) => e.stopPropagation()}>
+          <Text style={styles.reasonTitle}>Why are you cancelling?</Text>
+          <Text style={styles.reasonSubtitle}>This helps us improve. A cancellation fee may apply depending on timing.</Text>
+
+          {CANCEL_REASONS.map((r) => {
+            const selected = chosenReason === r;
+            return (
+              <Pressable
+                key={r}
+                style={[styles.reasonOption, selected && styles.reasonOptionSelected]}
+                onPress={() => setChosenReason(r)}
+              >
+                <Text style={[styles.reasonOptionText, selected && styles.reasonOptionTextSelected]}>{r}</Text>
+              </Pressable>
+            );
+          })}
+
+          {chosenReason === 'Other' ? (
+            <TextInput
+              style={styles.reasonInput}
+              placeholder="Tell us briefly (min 3 characters)"
+              placeholderTextColor={colors.textMuted}
+              value={otherText}
+              onChangeText={setOtherText}
+              multiline
+              autoFocus
+            />
+          ) : null}
+
+          <Pressable
+            style={[styles.reasonSubmit, !reasonValid && styles.reasonSubmitDisabled]}
+            disabled={!reasonValid}
+            onPress={confirmCancel}
+          >
+            <Text style={styles.reasonSubmitText}>Cancel trip</Text>
+          </Pressable>
+          <Pressable style={styles.reasonKeep} onPress={() => setReasonOpen(false)}>
+            <Text style={styles.reasonKeepText}>Keep trip</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
 
   // Live trips (not terminal) with valid pickup/drop coords get the immersive,
   // full-screen map — same treatment as the home screen. Coords arrive as
@@ -256,6 +326,7 @@ export function TripScreen({ route, navigation }: TripScreenProps) {
         <DraggableSheet onSnap={setSheetSnap} contentContainerStyle={styles.sheetContent}>
           {info}
         </DraggableSheet>
+        {reasonModal}
       </View>
     );
   }
@@ -268,6 +339,7 @@ export function TripScreen({ route, navigation }: TripScreenProps) {
       <ScrollView style={styles.root} contentContainerStyle={styles.content}>
         {info}
       </ScrollView>
+      {reasonModal}
     </View>
   );
 }
@@ -507,6 +579,33 @@ function timeAgo(iso: string): string {
 }
 
 const styles = StyleSheet.create({
+  reasonBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  reasonSheet: {
+    backgroundColor: colors.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.sm,
+  },
+  reasonTitle: { ...type.title, color: colors.text },
+  reasonSubtitle: { ...type.caption, color: colors.textMuted, marginBottom: spacing.sm },
+  reasonOption: {
+    borderWidth: 1, borderColor: colors.border, borderRadius: radius.md,
+    paddingVertical: spacing.lg, paddingHorizontal: spacing.lg,
+  },
+  reasonOptionSelected: { borderColor: colors.primary, backgroundColor: colors.surfaceAlt },
+  reasonOptionText: { ...type.body, color: colors.text },
+  reasonOptionTextSelected: { color: colors.primary, fontWeight: '700' },
+  reasonInput: {
+    ...type.body, color: colors.text, backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: colors.border, borderRadius: radius.md,
+    padding: spacing.lg, minHeight: 72, textAlignVertical: 'top',
+  },
+  reasonSubmit: {
+    backgroundColor: colors.danger, borderRadius: radius.md,
+    paddingVertical: spacing.lg, alignItems: 'center', marginTop: spacing.sm,
+  },
+  reasonSubmitDisabled: { backgroundColor: colors.surfaceAlt },
+  reasonSubmitText: { ...type.label, color: '#fff', fontSize: 16 },
+  reasonKeep: { paddingVertical: spacing.md, alignItems: 'center' },
+  reasonKeepText: { ...type.body, color: colors.textMuted },
   root: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.xl, paddingTop: TOP_OFFSET + 52, gap: spacing.lg, paddingBottom: spacing.xxl + 56 },
   mapLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
