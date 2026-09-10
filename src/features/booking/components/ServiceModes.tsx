@@ -16,7 +16,11 @@ import { useBookingDraft, MAX_STOPS } from '../../../store/bookingDraft';
 import { useRentalPackages } from '../api';
 import type { TripType, RentalPackage } from '../../../types/domain';
 import {
-  WhereToBar, RouteCard, PlaceRow, StopRow, AddStopButton, Divider, DateRow, DateCard, DateSpacer, SearchButton,
+  // Still used by Rental and Airport.
+  WhereToBar, RouteCard, PlaceRow, Divider, DateRow, DateCard, DateSpacer, SearchButton,
+  // Ride form (reference design).
+  TripTypeTabs, RouteStack, RoutePill, RouteConnector, SwapButton, RemoveStopButton,
+  AddStopPill, DateTileRow, DateTile, PrimaryCta,
 } from './BookingShared';
 import { colors, radius, spacing, type } from '../../../theme';
 
@@ -27,56 +31,91 @@ type Nav = { navigate: (screen: string, params?: object) => void };
 export function RideMode({ navigation }: { navigation: Nav }) {
   const {
     pickup, drop, stops, tripType, pickupAt, returnAt,
-    setTripType, setPickupAt, setReturnAt, removeStop,
+    setTripType, setPickupAt, setReturnAt, removeStop, swap,
   } = useBookingDraft();
 
-  const showReturn = tripType === 'ROUND_TRIP';
+  const isRound = tripType === 'ROUND_TRIP';
   const canContinue = Boolean(pickup && drop);
+
+  /**
+   * Trip end must never precede trip start. Rather than let the user pick an
+   * impossible pair and fail at quote time, the end picker is floored at the
+   * start — and if an existing end is now in the past relative to a newly
+   * chosen start, it is pulled forward with it.
+   */
+  const onStartChange = (iso: string) => {
+    setPickupAt(iso);
+    if (isRound && returnAt && new Date(returnAt) < new Date(iso)) setReturnAt(iso);
+  };
 
   return (
     <View style={styles.body}>
-      <SubToggle
-        options={[{ key: 'ONE_WAY', label: 'One way' }, { key: 'ROUND_TRIP', label: 'Round trip' }]}
-        value={tripType === 'ROUND_TRIP' ? 'ROUND_TRIP' : 'ONE_WAY'}
-        onChange={setTripType}
+      <TripTypeTabs
+        options={[
+          { key: 'ONE_WAY', label: 'One way', icon: '⏱' },
+          { key: 'ROUND_TRIP', label: 'Round trip', icon: '🚕' },
+        ]}
+        value={isRound ? 'ROUND_TRIP' : 'ONE_WAY'}
+        onChange={(k) => setTripType(k as TripType)}
       />
 
-      <WhereToBar
-        label={drop?.label ?? pickup?.label ?? 'Where to?'}
-        onPress={() => navigation.navigate('PlaceSearch', { field: pickup ? 'drop' : 'pickup' })}
-      />
+      <RouteStack>
+        <RoutePill
+          kind="pickup"
+          value={pickup?.label ?? null}
+          placeholder="Add pickup point"
+          onPress={() => navigation.navigate('PlaceSearch', { field: 'pickup' })}
+        />
 
-      <RouteCard>
-        <PlaceRow kind="pickup" label="Pickup" value={pickup?.label ?? null} placeholder="Add pickup point"
-          onPress={() => navigation.navigate('PlaceSearch', { field: 'pickup' })} />
-        <Divider />
         {stops.map((s, i) => (
           <View key={`stop-${i}`}>
-            <StopRow
-              label={`Stop ${i + 1}`}
+            <RouteConnector />
+            <RoutePill
+              kind="stop"
               value={s.label}
+              placeholder={`Stop ${i + 1}`}
               onPress={() => navigation.navigate('PlaceSearch', { field: 'stop', index: i })}
-              onRemove={() => removeStop(i)}
+              trailing={<RemoveStopButton onPress={() => removeStop(i)} />}
             />
-            <Divider />
           </View>
         ))}
-        <PlaceRow kind="drop" label="Drop" value={drop?.label ?? null} placeholder="Where to?"
-          onPress={() => navigation.navigate('PlaceSearch', { field: 'drop' })} />
-        <AddStopButton
-          disabled={stops.length >= MAX_STOPS}
-          onPress={() => navigation.navigate('PlaceSearch', { field: 'stop', index: stops.length })}
+
+        <RouteConnector />
+        <RoutePill
+          kind="drop"
+          value={drop?.label ?? null}
+          placeholder="Where to?"
+          onPress={() => navigation.navigate('PlaceSearch', { field: 'drop' })}
+          // Swapping is meaningless until both ends exist, and swapping with
+          // stops in between would reverse the route without reversing them.
+          trailing={<SwapButton onPress={swap} disabled={!pickup || !drop || stops.length > 0} />}
         />
-      </RouteCard>
+      </RouteStack>
 
-      <DateRow>
-        <DateCard label="Trip Start" value={pickupAt} onChange={setPickupAt} minimumDate={new Date()} />
-        {showReturn ? (
-          <DateCard label="Trip End" value={returnAt ?? pickupAt} onChange={(iso) => setReturnAt(iso)} minimumDate={new Date(pickupAt)} />
-        ) : <DateSpacer />}
-      </DateRow>
+      <AddStopPill
+        disabled={stops.length >= MAX_STOPS}
+        onPress={() => navigation.navigate('PlaceSearch', { field: 'stop', index: stops.length })}
+      />
 
-      <SearchButton disabled={!canContinue} onPress={() => navigation.navigate('FareOptions')} />
+      <DateTileRow>
+        <DateTile
+          label="Trip start"
+          value={pickupAt}
+          onChange={onStartChange}
+          minimumDate={new Date()}
+          full={!isRound}
+        />
+        {isRound ? (
+          <DateTile
+            label="Trip end"
+            value={returnAt ?? pickupAt}
+            onChange={setReturnAt}
+            minimumDate={new Date(pickupAt)}
+          />
+        ) : null}
+      </DateTileRow>
+
+      <PrimaryCta label="Explore Cabs" disabled={!canContinue} onPress={() => navigation.navigate('FareOptions')} />
     </View>
   );
 }
@@ -197,20 +236,6 @@ export function AirportMode({ navigation }: { navigation: Nav }) {
 
 /* ----------------------------- shared subviews ----------------------------- */
 
-function SubToggle(props: { options: { key: TripType; label: string }[]; value: TripType; onChange: (t: TripType) => void }) {
-  return (
-    <View style={styles.toggle}>
-      {props.options.map((o) => {
-        const active = props.value === o.key;
-        return (
-          <Pressable key={o.key} style={[styles.toggleOption, active && styles.toggleOptionActive]} onPress={() => props.onChange(o.key)}>
-            <Text style={[styles.toggleText, active && styles.toggleTextActive]}>{o.label}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
 
 function LocalRentalPicker(props: {
   cityId: number;

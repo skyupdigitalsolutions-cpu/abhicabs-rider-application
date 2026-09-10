@@ -26,6 +26,7 @@ import {
   Dimensions,
   PanResponder,
   ScrollView,
+  StatusBar,
   StyleSheet,
   View,
   type LayoutChangeEvent,
@@ -35,6 +36,27 @@ import {
 import { colors } from '../../../theme';
 
 const { height: SCREEN_H } = Dimensions.get('window');
+
+/**
+ * Geometry exported so callers can position things relative to the sheet
+ * without re-declaring its numbers. Duplicating 0.48 in a screen is how a pin
+ * ends up half-buried the next time the snap point is tuned.
+ */
+export const SHEET_SNAP_HALF = 0.48;
+export const SHEET_SNAP_FULL = 0.06;
+
+/** Visible height of the promo strip above the sheet. */
+const BANNER_HEIGHT = 44;
+export const SHEET_BANNER_HEIGHT = BANNER_HEIGHT;
+/** How much of the strip hides behind the sheet's rounded top. */
+const BANNER_TUCK = 28;
+/**
+ * With a banner, the sheet cannot expand all the way to the top: the strip
+ * lives ABOVE the card, so at the full snap it would slide under the status
+ * bar and become unreadable. This floors the expanded position at enough room
+ * for the status bar plus the strip.
+ */
+const MIN_FULL_WITH_BANNER = (StatusBar.currentHeight ?? 24) + BANNER_HEIGHT + 8;
 
 export type SnapName = 'full' | 'half' | 'peek';
 
@@ -53,17 +75,30 @@ interface Props {
    * on the home screen).
    */
   containerHeight?: number;
+  /**
+   * Optional strip rendered ABOVE the sheet's rounded top, riding the same
+   * drag transform so it stays attached as the sheet moves.
+   *
+   * It is positioned outside the sheet's own box rather than as its first
+   * child, so it does not consume content height and the sheet's snap maths
+   * are untouched. Its lower edge tucks behind the sheet, which is what gives
+   * the "label peeking out from under the card" look.
+   */
+  banner?: React.ReactNode;
 }
 
 export function DraggableSheet({
   children,
   contentContainerStyle,
-  snapFull = 0.06,
-  snapHalf = 0.48,
+  banner,
+  snapFull = SHEET_SNAP_FULL,
+  snapHalf = SHEET_SNAP_HALF,
   onSnap,
   containerHeight = SCREEN_H,
 }: Props) {
-  const FULL = Math.round(containerHeight * snapFull);
+  const FULL = banner
+    ? Math.max(Math.round(containerHeight * snapFull), MIN_FULL_WITH_BANNER)
+    : Math.round(containerHeight * snapFull);
   const HALF = Math.round(containerHeight * snapHalf);
 
   const translateY = useRef(new Animated.Value(HALF)).current;
@@ -165,37 +200,73 @@ export function DraggableSheet({
 
   return (
     <Animated.View
-      style={[styles.sheet, { height: containerHeight - FULL + 40, transform: [{ translateY }] }]}
+      style={[
+        styles.wrap,
+        {
+          // The banner is a normal flow child sitting above the card, so the
+          // whole wrapper is grown and shifted up by its height. Positioning
+          // it outside the parent's bounds instead would risk Android
+          // clipping it, and would leave translateY meaning two things.
+          top: banner ? -BANNER_HEIGHT : 0,
+          height: containerHeight - FULL + 40 + (banner ? BANNER_HEIGHT : 0),
+          transform: [{ translateY }],
+        },
+      ]}
       {...pan.panHandlers}
     >
-      <View style={styles.header}>
-        <View style={styles.handle} />
-      </View>
+      {/* Drawn BEFORE the surface and with no elevation, so the card's own
+          elevation lifts it over the strip's tucked-under lower edge. */}
+      {banner ? <View style={styles.banner}>{banner}</View> : null}
 
-      <ScrollView
-        style={styles.body}
-        contentContainerStyle={contentContainerStyle}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        scrollEnabled={scrollEnabled}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
-        onLayout={onBodyLayout}
-        onContentSizeChange={onContentSizeChange}
-      >
-        {children}
-      </ScrollView>
+      <View style={styles.surface}>
+        <View style={styles.header}>
+          <View style={styles.handle} />
+        </View>
+
+        <ScrollView
+          style={styles.body}
+          contentContainerStyle={contentContainerStyle}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          scrollEnabled={scrollEnabled}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+          onLayout={onBodyLayout}
+          onContentSizeChange={onContentSizeChange}
+        >
+          {children}
+        </ScrollView>
+      </View>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  sheet: {
-    position: 'absolute', left: 0, right: 0, top: 0,
+  // Transparent positioner. Holds the banner and the card, and owns the drag
+  // transform so both move together.
+  wrap: { position: 'absolute', left: 0, right: 0 },
+
+  // The white card itself.
+  surface: {
+    flex: 1,
     backgroundColor: colors.bg,
     borderTopLeftRadius: 28, borderTopRightRadius: 28,
     shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 12, shadowOffset: { width: 0, height: -3 },
     elevation: 12,
+  },
+
+  // Sits above the card. BANNER_TUCK of its height is hidden behind the card's
+  // rounded top, so the amber reads as one piece with the sheet rather than a
+  // separate floating bar.
+  banner: {
+    height: BANNER_HEIGHT + BANNER_TUCK,
+    // Pulls the card up over the strip's lower edge, so the amber appears to
+    // run under the sheet rather than butt against it.
+    marginBottom: -BANNER_TUCK,
+    paddingBottom: BANNER_TUCK,
+    backgroundColor: colors.primary,
+    borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    flexDirection: 'row', alignItems: 'center',
   },
   header: { height: 40, alignItems: 'center', justifyContent: 'center' },
   handle: { width: 48, height: 5, borderRadius: 3, backgroundColor: colors.border },

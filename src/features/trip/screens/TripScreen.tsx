@@ -12,9 +12,10 @@
  * fare. Terminal trips drop the map and show the summary layout only.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Dimensions, Linking, Modal, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, Alert, Dimensions, KeyboardAvoidingView, Linking, Modal, Platform,
+  Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { useTripSummary, useCancelTrip, usePayTrip } from '../api';
 import { TripMap } from '../components/TripMap';
@@ -58,6 +59,18 @@ export function TripScreen({ route, navigation }: TripScreenProps) {
   const [reasonOpen, setReasonOpen] = useState(false);
   const [chosenReason, setChosenReason] = useState<string | null>(null);
   const [otherText, setOtherText] = useState('');
+
+  /**
+   * Scrolls the cancellation sheet to the free-text box when "Other" is
+   * chosen — it sits at the very bottom, exactly where the keyboard lands.
+   *
+   * MUST be declared here, above the isLoading / isError early returns below.
+   * Hooks after a conditional return run on some renders and not others, and
+   * React counts them positionally: the loading pass would run 29 hooks and
+   * the loaded pass 30, which throws "Rendered more hooks than during the
+   * previous render".
+   */
+  const reasonScrollRef = useRef<ScrollView>(null);
 
   if (isLoading && !data) {
     return (
@@ -133,50 +146,80 @@ export function TripScreen({ route, navigation }: TripScreenProps) {
     }
   };
 
+  const chooseReason = (r: string) => {
+    setChosenReason(r);
+    if (r === 'Other') {
+      // After the input has mounted and the sheet has re-measured.
+      setTimeout(() => reasonScrollRef.current?.scrollToEnd({ animated: true }), 120);
+    }
+  };
+
   const reasonModal = (
     <Modal visible={reasonOpen} transparent animationType="fade" onRequestClose={() => setReasonOpen(false)}>
-      <Pressable style={styles.reasonBackdrop} onPress={() => setReasonOpen(false)}>
-        <Pressable style={styles.reasonSheet} onPress={(e) => e.stopPropagation()}>
-          <Text style={styles.reasonTitle}>Why are you cancelling?</Text>
-          <Text style={styles.reasonSubtitle}>This helps us improve. A cancellation fee may apply depending on timing.</Text>
+      {/*
+        On iOS nothing moves for the keyboard unless we ask, hence 'padding'.
+        On Android the window resizes on its own (softwareKeyboardLayoutMode
+        defaults to "resize"), so adding padding here as well would push the
+        sheet up twice and leave a gap under it.
+      */}
+      <KeyboardAvoidingView
+        style={styles.reasonAvoider}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <Pressable style={styles.reasonBackdrop} onPress={() => setReasonOpen(false)}>
+          <Pressable style={styles.reasonSheet} onPress={(e) => e.stopPropagation()}>
+            <ScrollView
+              ref={reasonScrollRef}
+              contentContainerStyle={styles.reasonScrollBody}
+              // Without this, the first tap on an option only dismisses the
+              // keyboard and the rider has to tap everything twice.
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+            >
+              <Text style={styles.reasonTitle}>Why are you cancelling?</Text>
+              <Text style={styles.reasonSubtitle}>This helps us improve. A cancellation fee may apply depending on timing.</Text>
 
-          {CANCEL_REASONS.map((r) => {
-            const selected = chosenReason === r;
-            return (
+              {CANCEL_REASONS.map((r) => {
+                const selected = chosenReason === r;
+                return (
+                  <Pressable
+                    key={r}
+                    style={[styles.reasonOption, selected && styles.reasonOptionSelected]}
+                    onPress={() => chooseReason(r)}
+                  >
+                    <Text style={[styles.reasonOptionText, selected && styles.reasonOptionTextSelected]}>{r}</Text>
+                  </Pressable>
+                );
+              })}
+
+              {chosenReason === 'Other' ? (
+                <TextInput
+                  style={styles.reasonInput}
+                  placeholder="Tell us briefly (min 3 characters)"
+                  placeholderTextColor={colors.textMuted}
+                  value={otherText}
+                  onChangeText={setOtherText}
+                  multiline
+                  autoFocus
+                  onFocus={() => setTimeout(() => reasonScrollRef.current?.scrollToEnd({ animated: true }), 120)}
+                />
+              ) : null}
+
               <Pressable
-                key={r}
-                style={[styles.reasonOption, selected && styles.reasonOptionSelected]}
-                onPress={() => setChosenReason(r)}
+                style={[styles.reasonSubmit, !reasonValid && styles.reasonSubmitDisabled]}
+                disabled={!reasonValid}
+                onPress={confirmCancel}
               >
-                <Text style={[styles.reasonOptionText, selected && styles.reasonOptionTextSelected]}>{r}</Text>
+                <Text style={styles.reasonSubmitText}>Cancel trip</Text>
               </Pressable>
-            );
-          })}
-
-          {chosenReason === 'Other' ? (
-            <TextInput
-              style={styles.reasonInput}
-              placeholder="Tell us briefly (min 3 characters)"
-              placeholderTextColor={colors.textMuted}
-              value={otherText}
-              onChangeText={setOtherText}
-              multiline
-              autoFocus
-            />
-          ) : null}
-
-          <Pressable
-            style={[styles.reasonSubmit, !reasonValid && styles.reasonSubmitDisabled]}
-            disabled={!reasonValid}
-            onPress={confirmCancel}
-          >
-            <Text style={styles.reasonSubmitText}>Cancel trip</Text>
-          </Pressable>
-          <Pressable style={styles.reasonKeep} onPress={() => setReasonOpen(false)}>
-            <Text style={styles.reasonKeepText}>Keep trip</Text>
+              <Pressable style={styles.reasonKeep} onPress={() => setReasonOpen(false)}>
+                <Text style={styles.reasonKeepText}>Keep trip</Text>
+              </Pressable>
+            </ScrollView>
           </Pressable>
         </Pressable>
-      </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 
@@ -579,9 +622,20 @@ function timeAgo(iso: string): string {
 }
 
 const styles = StyleSheet.create({
+  reasonAvoider: { flex: 1 },
   reasonBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
   reasonSheet: {
     backgroundColor: colors.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    // Caps the sheet so the backdrop is always tappable to dismiss, and —
+    // more importantly — lets it SHRINK when the window resizes for the
+    // keyboard. A fixed-height sheet would keep its size and push its own top
+    // off screen, which is why the title and first options were being cut off.
+    maxHeight: '88%',
+    overflow: 'hidden',
+  },
+  // Padding lives on the scroll content, not the sheet: on the sheet it would
+  // clip the scrollable area and the last option would sit under the edge.
+  reasonScrollBody: {
     padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.sm,
   },
   reasonTitle: { ...type.title, color: colors.text },
