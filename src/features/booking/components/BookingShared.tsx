@@ -7,17 +7,14 @@
  * unique control.
  */
 
-import { lazy, Suspense, useState } from 'react';
+import { useState } from 'react';
 import {
-  ActivityIndicator, Platform, Pressable, StyleSheet, Text, View,
+  Platform, Pressable, StyleSheet, Text, View,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import type { CarDot } from '../nearby.api';
+import { HomeMap } from './HomeMap';
 import { colors, radius, spacing, type } from '../../../theme';
-
-const HomeMap = lazy(() =>
-  import('./HomeMap').then((m) => ({ default: m.HomeMap })),
-);
 
 /* --------------------------------- Map ------------------------------------- */
 
@@ -31,17 +28,15 @@ export function SharedMap(props: {
 }) {
   return (
     <View style={[styles.mapLayer, { height: props.height }]}>
-      <Suspense fallback={<View style={styles.mapFallback}><ActivityIndicator color={colors.primary} /></View>}>
-        <HomeMap
-          centre={props.centre}
-          cars={props.cars}
-          loading={props.loading}
-          height={props.height}
-          fullBleed
-          pickupMode={props.pickupMode}
-          onPickupChange={props.onPickupChange}
-        />
-      </Suspense>
+      <HomeMap
+        centre={props.centre}
+        cars={props.cars}
+        loading={props.loading}
+        height={props.height}
+        fullBleed
+        pickupMode={props.pickupMode}
+        onPickupChange={props.onPickupChange}
+      />
     </View>
   );
 }
@@ -204,7 +199,6 @@ export function formatWhen(d: Date): string {
 
 const styles = StyleSheet.create({
   mapLayer: { borderRadius: 0 },
-  mapFallback: { flex: 1, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
 
   whereTo: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
