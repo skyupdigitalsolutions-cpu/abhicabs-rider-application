@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 import type { CarDot } from '../nearby.api';
 import { fareApi } from '../../../api/endpoints';
@@ -34,11 +34,20 @@ interface Props {
   /** When true, show the fixed centre "Pickup Point" pin and report drags. */
   pickupMode?: boolean;
   onPickupChange?: (p: PickupChoice) => void;
+  /**
+   * The centre is a city-level default rather than the rider's real position.
+   * The map still draws — an empty grey box helps nobody — but we must not
+   * imply the blue "you are here" dot is accurate, and we say so in the pill.
+   */
+  approximate?: boolean;
+  /** Shown as a tappable retry when a fresh location attempt might work. */
+  onRetryLocation?: () => void;
 }
 
 export function HomeMap({
   centre, cars, height = 260, loading = false, fullBleed = false,
   pickupMode = false, onPickupChange,
+  approximate = false, onRetryLocation,
 }: Props) {
   const mapRef = useRef<MapView>(null);
 
@@ -104,7 +113,9 @@ export function HomeMap({
         style={StyleSheet.absoluteFill}
         provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
         initialRegion={region}
-        showsUserLocation={!pickupMode}
+        // Never show the "you are here" dot over a fallback centre — it would
+        // point at the city centre and read as the rider's actual position.
+        showsUserLocation={!pickupMode && !approximate}
         showsMyLocationButton={false}
         toolbarEnabled={false}
         loadingEnabled
@@ -136,8 +147,14 @@ export function HomeMap({
         </View>
       ) : null}
 
-      {/* Top pill: cabs nearby (normal) OR the resolved pickup address (picking) */}
-      <View style={[styles.pill, pickupMode && styles.pillAddress]}>
+      {/* Top pill: cabs nearby (normal) OR the resolved pickup address (picking).
+          When the centre is a fallback we say so and offer a retry, rather than
+          reporting "cabs nearby" about a city the rider may not be in. */}
+      <Pressable
+        style={[styles.pill, pickupMode && styles.pillAddress, !pickupMode && approximate && styles.pillWarn]}
+        onPress={!pickupMode && approximate ? onRetryLocation : undefined}
+        disabled={pickupMode || !approximate || !onRetryLocation}
+      >
         {pickupMode ? (
           looking ? (
             <ActivityIndicator color="#FFFFFF" size="small" />
@@ -146,12 +163,18 @@ export function HomeMap({
               📍  {address || 'Move the map to set pickup'}
             </Text>
           )
+        ) : approximate ? (
+          <Text style={styles.pillText} numberOfLines={1}>
+            {onRetryLocation
+              ? 'Approximate area · Tap to retry location'
+              : 'Approximate area · Enable location in Settings'}
+          </Text>
         ) : (
           <Text style={styles.pillText}>
             {cars.length > 0 ? `${cars.length} cab${cars.length > 1 ? 's' : ''} nearby` : 'Finding cabs near you…'}
           </Text>
         )}
-      </View>
+      </Pressable>
     </View>
   );
 }
@@ -194,5 +217,6 @@ const styles = StyleSheet.create({
   },
   pillText: { ...type.caption, color: '#FFFFFF', fontWeight: '600' },
   pillAddress: { maxWidth: '86%', backgroundColor: '#2E7D32' },
+  pillWarn: { maxWidth: '92%', backgroundColor: '#B26A00' },
   pillAddressText: { fontSize: 13 },
 });

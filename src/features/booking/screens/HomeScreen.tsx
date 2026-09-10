@@ -21,6 +21,7 @@ import { SharedMap } from '../components/BookingShared';
 import { RideMode, RentalMode, AirportMode } from '../components/ServiceModes';
 import { useBookingDraft } from '../../../store/bookingDraft';
 import type { HomeScreenProps } from '../../../navigation/types';
+import { DEFAULT_CITY } from '../../../config/catalog';
 import { colors, radius, spacing, type } from '../../../theme';
 
 const { height: SCREEN_H } = Dimensions.get('window');
@@ -28,7 +29,30 @@ const { height: SCREEN_H } = Dimensions.get('window');
 type Tab = 'RIDE' | 'RENTAL' | 'AIRPORT';
 
 export function HomeScreen({ navigation }: HomeScreenProps) {
-  const { coord: userLoc, status: locStatus } = useUserLocation();
+  const { coord: userLoc, status: locStatus, resolved: locResolved, refresh: refreshLocation } =
+    useUserLocation();
+
+  /**
+   * The map ALWAYS gets a centre.
+   *
+   * HomeMap renders a placeholder when `centre` is null, so passing the raw
+   * device location meant the home screen showed no map at all whenever the
+   * location was unavailable — permission denied, no GPS fix indoors, an
+   * emulator with no location set. That is why the map was missing here while
+   * the trip map worked: the trip map takes its coordinates from the booking,
+   * which is never null.
+   *
+   * Every other screen that needs coordinates already falls back this way
+   * (PlaceSearchScreen, PickOnMapScreen, bookingDraft). The home screen was the
+   * only one that did not. A map of the right city is far more useful than an
+   * empty grey box, and the rider can still drag the pin or search.
+   *
+   * `usingFallback` is kept separate so the UI can be honest about it rather
+   * than silently implying the default is the rider's actual position.
+   */
+  const usingFallback = !userLoc;
+  const mapCentre = userLoc ?? DEFAULT_CITY.center;
+
   const nearby = useNearbyCars(userLoc);
   const setTripType = useBookingDraft((s) => s.setTripType);
   const setPickup = useBookingDraft((s) => s.setPickup);
@@ -71,12 +95,16 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       {/* Full-screen map. In picking mode it becomes the pickup picker. */}
       <View style={styles.mapLayer}>
         <SharedMap
-          centre={userLoc}
+          centre={mapCentre}
           cars={nearby.data ?? []}
-          loading={locStatus === 'loading'}
+          // Only claim to be loading until location has actually settled. Once
+          // it has, we are showing the fallback and there is nothing to wait for.
+          loading={!locResolved && locStatus === 'loading'}
           height={SCREEN_H}
           pickupMode={picking}
           onPickupChange={setPending}
+          approximate={usingFallback}
+          onRetryLocation={locStatus === 'denied' ? undefined : refreshLocation}
         />
       </View>
 

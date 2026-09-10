@@ -25,6 +25,10 @@ export function SharedMap(props: {
   height: number;
   pickupMode?: boolean;
   onPickupChange?: (p: { lat: number; lng: number; label: string }) => void;
+  /** Centre is a city-level default, not the rider's real position. */
+  approximate?: boolean;
+  /** Offered when a location retry could plausibly succeed. */
+  onRetryLocation?: () => void;
 }) {
   return (
     <View style={[styles.mapLayer, { height: props.height }]}>
@@ -36,6 +40,8 @@ export function SharedMap(props: {
         fullBleed
         pickupMode={props.pickupMode}
         onPickupChange={props.onPickupChange}
+        approximate={props.approximate}
+        onRetryLocation={props.onRetryLocation}
       />
     </View>
   );
