@@ -21,6 +21,7 @@ export type AppStackParamList = {
   Trip: { bookingId: string };
   Trips: undefined;
   Profile: undefined;
+  Vehicles: undefined;
 };
 
 /** The unauthenticated stack. */
@@ -48,3 +49,4 @@ export type FareOptionsScreenProps = NativeStackScreenProps<AppStackParamList, '
 export type TripScreenProps = NativeStackScreenProps<AppStackParamList, 'Trip'>;
 export type TripsScreenProps = NativeStackScreenProps<AppStackParamList, 'Trips'>;
 export type ProfileScreenProps = NativeStackScreenProps<AppStackParamList, 'Profile'>;
+export type VehiclesScreenProps = NativeStackScreenProps<AppStackParamList, 'Vehicles'>;

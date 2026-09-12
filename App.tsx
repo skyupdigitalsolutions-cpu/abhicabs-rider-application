@@ -49,6 +49,9 @@ const TripsScreen = lazy(() =>
 const ProfileScreen = lazy(() =>
   import('./src/features/profile/screens/ProfileScreen').then((m) => ({ default: m.ProfileScreen })),
 );
+const VehiclesScreen = lazy(() =>
+  import('./src/features/booking/screens/VehiclesScreen').then((m) => ({ default: m.VehiclesScreen })),
+);
 
 import type { AppStackParamList, AuthStackParamList } from './src/navigation/types';
 import { colors } from './src/theme';
@@ -85,6 +88,7 @@ function AuthedNavigator() {
       <AppStack.Screen name="PlaceSearch" component={PlaceSearchScreen} options={{ title: 'Search', presentation: 'card' }} />
       <AppStack.Screen name="PickOnMap" component={PickOnMapScreen} options={{ title: 'Pick on map' }} />
       <AppStack.Screen name="FareOptions" component={FareOptionsScreen} options={{ title: 'Choose ride' }} />
+      <AppStack.Screen name="Vehicles" component={VehiclesScreen} options={{ title: 'Our vehicles' }} />
       <AppStack.Screen name="Trip" component={TripScreen} options={{ headerShown: false }} />
       <AppStack.Screen name="Trips" component={TripsScreen} options={{ title: 'Your trips' }} />
       <AppStack.Screen name="Profile" component={ProfileScreen} options={{ title: 'Account' }} />

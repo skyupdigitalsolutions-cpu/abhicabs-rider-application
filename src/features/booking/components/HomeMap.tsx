@@ -64,6 +64,16 @@ interface Props {
   /** Reports whether an address lookup is in flight, for the caller's chip. */
   onResolvingChange?: (busy: boolean) => void;
   /**
+   * The rider's ACTUAL position, for the blue dot.
+   *
+   * Kept separate from `centre` on purpose. Once the pickup picker is on,
+   * `centre` is the pickup — which the rider drags away from themselves. The
+   * dot must keep pointing at the device, not at the pin, or it stops meaning
+   * anything. Null when the location is unknown or only a city-level guess,
+   * in which case no dot is drawn at all rather than a misleading one.
+   */
+  userLocation?: { lat: number; lng: number } | null;
+  /**
    * The centre is a city-level default rather than the rider's real position.
    * The map still draws — an empty grey box helps nobody — but we must not
    * imply the blue "you are here" dot is accurate, and we say so in the pill.
@@ -269,7 +279,7 @@ function buildHtml(key: string, lat: number, lng: number): string {
 export function HomeMap({
   centre, cars, height = 260, loading = false, fullBleed = false,
   pickupMode = false, onPickupChange, pinOffsetY, onResolvingChange,
-  approximate = false, onRetryLocation,
+  approximate = false, onRetryLocation, userLocation,
 }: Props) {
   const webRef = useRef<WebView>(null);
 
@@ -334,12 +344,22 @@ export function HomeMap({
     else inject(`window.__setCentre(${centre.lat}, ${centre.lng}, true)`);
   }, [ready, centre?.lat, centre?.lng, pickupMode, inject]);
 
-  // The blue dot is suppressed over a fallback centre and while picking.
+  /**
+   * The blue "you are here" dot.
+   *
+   * Driven by userLocation, NOT by centre: with the picker on, centre is
+   * wherever the rider has dragged the pin, and a dot there would claim they
+   * had moved. Shown whenever a real position is known — including while
+   * picking, since seeing yourself is how you judge where you are dragging to.
+   */
   useEffect(() => {
-    if (!ready || !centre) return;
-    const show = !pickupMode && !approximate;
-    inject(`window.__setUser(${centre.lat}, ${centre.lng}, ${show})`);
-  }, [ready, centre?.lat, centre?.lng, pickupMode, approximate, inject]);
+    if (!ready) return;
+    if (!userLocation || approximate) {
+      inject('window.__setUser(0, 0, false)');
+      return;
+    }
+    inject(`window.__setUser(${userLocation.lat}, ${userLocation.lng}, true)`);
+  }, [ready, userLocation?.lat, userLocation?.lng, approximate, inject]);
 
   // Cars stay visible while picking: the pickup pin is now always on, so
   // hiding them would mean never showing nearby cabs at all.

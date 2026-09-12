@@ -32,6 +32,8 @@ import {
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  type StyleProp,
+  type ViewStyle,
 } from 'react-native';
 import { colors } from '../../../theme';
 
@@ -85,6 +87,28 @@ interface Props {
    * the "label peeking out from under the card" look.
    */
   banner?: React.ReactNode;
+  /**
+   * Overrides on the sheet's own surface — in practice, its background.
+   *
+   * The home screen darkens it so the booking form can sit on top as a white
+   * CARD with all four corners rounded. The sheet surface can only ever round
+   * its top (its bottom runs off screen), so a rounded-bottom booking area has
+   * to be a separate view drawn on a contrasting background.
+   */
+  surfaceStyle?: StyleProp<ViewStyle>;
+  /** Drag handle tint, for when the surface is dark. */
+  handleStyle?: StyleProp<ViewStyle>;
+  /**
+   * Show the drag handle and the 40px header row it sits in.
+   *
+   * Hiding it does NOT disable dragging — the pan responder is on the whole
+   * sheet, so it still moves. It only removes the visual affordance, which is
+   * a real cost: the handle is the standard signal that a sheet can be
+   * dragged, and without it riders who have not tried it may never discover
+   * the expanded state. Worth it only where the sheet's content already makes
+   * that obvious.
+   */
+  showHandle?: boolean;
 }
 
 export function DraggableSheet({
@@ -95,6 +119,9 @@ export function DraggableSheet({
   snapHalf = SHEET_SNAP_HALF,
   onSnap,
   containerHeight = SCREEN_H,
+  surfaceStyle,
+  handleStyle,
+  showHandle = true,
 }: Props) {
   const FULL = banner
     ? Math.max(Math.round(containerHeight * snapFull), MIN_FULL_WITH_BANNER)
@@ -218,10 +245,12 @@ export function DraggableSheet({
           elevation lifts it over the strip's tucked-under lower edge. */}
       {banner ? <View style={styles.banner}>{banner}</View> : null}
 
-      <View style={styles.surface}>
-        <View style={styles.header}>
-          <View style={styles.handle} />
-        </View>
+      <View style={[styles.surface, surfaceStyle]}>
+        {showHandle ? (
+          <View style={styles.header}>
+            <View style={[styles.handle, handleStyle]} />
+          </View>
+        ) : null}
 
         <ScrollView
           style={styles.body}
@@ -251,6 +280,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
     borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    /**
+     * Clip children to the rounded top.
+     *
+     * Without this the corners are only cosmetic: they round the surface's own
+     * background, but anything drawn inside still paints over them. Scrolling
+     * the body up puts square content into the curve — at the top of the
+     * scroll it overlaps by 16px — and the rounded corner visibly disappears
+     * behind it. Clipping makes the content slide UNDER the curve instead,
+     * which is what a rounded sheet should look like.
+     */
+    overflow: 'hidden',
     shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 12, shadowOffset: { width: 0, height: -3 },
     elevation: 12,
   },

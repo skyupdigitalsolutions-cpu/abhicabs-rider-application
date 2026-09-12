@@ -33,6 +33,8 @@ export function SharedMap(props: {
   pinOffsetY?: number;
   /** Reports whether an address lookup is in flight. */
   onResolvingChange?: (busy: boolean) => void;
+  /** The rider's real position, for the blue dot — not the same as centre. */
+  userLocation?: { lat: number; lng: number } | null;
 }) {
   return (
     <View style={[styles.mapLayer, { height: props.height }]}>
@@ -48,6 +50,7 @@ export function SharedMap(props: {
         onRetryLocation={props.onRetryLocation}
         pinOffsetY={props.pinOffsetY}
         onResolvingChange={props.onResolvingChange}
+        userLocation={props.userLocation}
       />
     </View>
   );

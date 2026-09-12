@@ -14,7 +14,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Dimensions, KeyboardAvoidingView, Linking, Modal, Platform,
+  ActivityIndicator, Alert, Dimensions, Keyboard, Linking, Modal, Platform,
   Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { useTripSummary, useCancelTrip, usePayTrip } from '../api';
@@ -71,6 +71,63 @@ export function TripScreen({ route, navigation }: TripScreenProps) {
    * previous render".
    */
   const reasonScrollRef = useRef<ScrollView>(null);
+
+  /**
+   * Keyboard handling for the cancellation sheet, measured rather than assumed.
+   *
+   * KeyboardAvoidingView was the obvious tool and it did not work here. RN's
+   * Modal puts its content in a SEPARATE Android window, and that window does
+   * not inherit the activity's adjustResize — so the keyboard simply covered
+   * the sheet and nothing moved. Whether it resizes varies by RN version and
+   * by how the Modal is configured, which makes any fixed `behavior` prop a
+   * guess that is wrong on some devices.
+   *
+   * So: listen for the keyboard, measure the space actually available, and
+   * work out from those two numbers whether the window resized on its own. If
+   * it did, add nothing. If it did not, lift the sheet by the keyboard height.
+   * Either way the sheet ends up above the keyboard, with no double-lift.
+   */
+  const [kbHeight, setKbHeight] = useState(0);
+  const [availH, setAvailH] = useState(SCREEN_H);
+
+  useEffect(() => {
+    // 'Will' events on iOS animate in step with the keyboard; Android only
+    // has the 'Did' variants.
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillChangeFrame' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const show = Keyboard.addListener(showEvt, (e) => setKbHeight(e.endCoordinates?.height ?? 0));
+    const hide = Keyboard.addListener(hideEvt, () => setKbHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+
+  // If the modal window shrank by roughly the keyboard height, the platform
+  // already handled it. Half the keyboard height is a generous threshold —
+  // it distinguishes "resized" from "not resized" without needing the two
+  // numbers to agree exactly, which they rarely do once insets are involved.
+  const windowResized = kbHeight > 0 && availH < SCREEN_H - kbHeight / 2;
+  const lift = windowResized ? 0 : kbHeight;
+
+  // Cap the sheet against the space left AFTER lifting, so its body scrolls
+  // instead of its top being pushed off screen.
+  const reasonMaxH = Math.round((availH - lift) * 0.88);
+
+  /**
+   * Bring the free-text box into view once "Other" is chosen.
+   *
+   * Keyed on kbHeight as well as the choice: the sheet only reaches its final
+   * size after the keyboard has been measured and the lift applied, so
+   * scrolling on the tap alone would scroll the pre-resize layout and stop
+   * short. Re-running when the keyboard settles lands it correctly.
+   */
+  useEffect(() => {
+    if (!reasonOpen || chosenReason !== 'Other') return;
+    const t = setTimeout(() => reasonScrollRef.current?.scrollToEnd({ animated: true }), 60);
+    return () => clearTimeout(t);
+  }, [reasonOpen, chosenReason, kbHeight, reasonMaxH]);
 
   if (isLoading && !data) {
     return (
@@ -146,80 +203,72 @@ export function TripScreen({ route, navigation }: TripScreenProps) {
     }
   };
 
-  const chooseReason = (r: string) => {
-    setChosenReason(r);
-    if (r === 'Other') {
-      // After the input has mounted and the sheet has re-measured.
-      setTimeout(() => reasonScrollRef.current?.scrollToEnd({ animated: true }), 120);
-    }
-  };
+  const chooseReason = (r: string) => setChosenReason(r);
 
   const reasonModal = (
     <Modal visible={reasonOpen} transparent animationType="fade" onRequestClose={() => setReasonOpen(false)}>
-      {/*
-        On iOS nothing moves for the keyboard unless we ask, hence 'padding'.
-        On Android the window resizes on its own (softwareKeyboardLayoutMode
-        defaults to "resize"), so adding padding here as well would push the
-        sheet up twice and leave a gap under it.
-      */}
-      <KeyboardAvoidingView
-        style={styles.reasonAvoider}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      {/* onLayout measures the modal window, which is how we detect whether
+          the platform resized it for the keyboard. See the hooks above. */}
+      <Pressable
+        style={styles.reasonBackdrop}
+        onPress={() => setReasonOpen(false)}
+        onLayout={(e) => setAvailH(e.nativeEvent.layout.height)}
       >
-        <Pressable style={styles.reasonBackdrop} onPress={() => setReasonOpen(false)}>
-          <Pressable style={styles.reasonSheet} onPress={(e) => e.stopPropagation()}>
-            <ScrollView
-              ref={reasonScrollRef}
-              contentContainerStyle={styles.reasonScrollBody}
-              // Without this, the first tap on an option only dismisses the
-              // keyboard and the rider has to tap everything twice.
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              bounces={false}
+        <Pressable
+          style={[styles.reasonSheet, { maxHeight: reasonMaxH, marginBottom: lift }]}
+          onPress={(e) => e.stopPropagation()}
+        >
+          <ScrollView
+            ref={reasonScrollRef}
+            contentContainerStyle={styles.reasonScrollBody}
+            // Without this, the first tap on an option only dismisses the
+            // keyboard and the rider has to tap everything twice.
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
+            <Text style={styles.reasonTitle}>Why are you cancelling?</Text>
+            <Text style={styles.reasonSubtitle}>This helps us improve. A cancellation fee may apply depending on timing.</Text>
+
+            {CANCEL_REASONS.map((r) => {
+              const selected = chosenReason === r;
+              return (
+                <Pressable
+                  key={r}
+                  style={[styles.reasonOption, selected && styles.reasonOptionSelected]}
+                  onPress={() => chooseReason(r)}
+                >
+                  <Text style={[styles.reasonOptionText, selected && styles.reasonOptionTextSelected]}>{r}</Text>
+                </Pressable>
+              );
+            })}
+
+            {chosenReason === 'Other' ? (
+              <TextInput
+                style={styles.reasonInput}
+                placeholder="Tell us briefly (min 3 characters)"
+                placeholderTextColor={colors.textMuted}
+                value={otherText}
+                onChangeText={setOtherText}
+                multiline
+                autoFocus
+                onFocus={() => setTimeout(() => reasonScrollRef.current?.scrollToEnd({ animated: true }), 120)}
+              />
+            ) : null}
+
+            <Pressable
+              style={[styles.reasonSubmit, !reasonValid && styles.reasonSubmitDisabled]}
+              disabled={!reasonValid}
+              onPress={confirmCancel}
             >
-              <Text style={styles.reasonTitle}>Why are you cancelling?</Text>
-              <Text style={styles.reasonSubtitle}>This helps us improve. A cancellation fee may apply depending on timing.</Text>
-
-              {CANCEL_REASONS.map((r) => {
-                const selected = chosenReason === r;
-                return (
-                  <Pressable
-                    key={r}
-                    style={[styles.reasonOption, selected && styles.reasonOptionSelected]}
-                    onPress={() => chooseReason(r)}
-                  >
-                    <Text style={[styles.reasonOptionText, selected && styles.reasonOptionTextSelected]}>{r}</Text>
-                  </Pressable>
-                );
-              })}
-
-              {chosenReason === 'Other' ? (
-                <TextInput
-                  style={styles.reasonInput}
-                  placeholder="Tell us briefly (min 3 characters)"
-                  placeholderTextColor={colors.textMuted}
-                  value={otherText}
-                  onChangeText={setOtherText}
-                  multiline
-                  autoFocus
-                  onFocus={() => setTimeout(() => reasonScrollRef.current?.scrollToEnd({ animated: true }), 120)}
-                />
-              ) : null}
-
-              <Pressable
-                style={[styles.reasonSubmit, !reasonValid && styles.reasonSubmitDisabled]}
-                disabled={!reasonValid}
-                onPress={confirmCancel}
-              >
-                <Text style={styles.reasonSubmitText}>Cancel trip</Text>
-              </Pressable>
-              <Pressable style={styles.reasonKeep} onPress={() => setReasonOpen(false)}>
-                <Text style={styles.reasonKeepText}>Keep trip</Text>
-              </Pressable>
-            </ScrollView>
-          </Pressable>
+              <Text style={styles.reasonSubmitText}>Cancel trip</Text>
+            </Pressable>
+            <Pressable style={styles.reasonKeep} onPress={() => setReasonOpen(false)}>
+              <Text style={styles.reasonKeepText}>Keep trip</Text>
+            </Pressable>
+          </ScrollView>
         </Pressable>
-      </KeyboardAvoidingView>
+      </Pressable>
     </Modal>
   );
 
@@ -622,15 +671,11 @@ function timeAgo(iso: string): string {
 }
 
 const styles = StyleSheet.create({
-  reasonAvoider: { flex: 1 },
   reasonBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
   reasonSheet: {
     backgroundColor: colors.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    // Caps the sheet so the backdrop is always tappable to dismiss, and —
-    // more importantly — lets it SHRINK when the window resizes for the
-    // keyboard. A fixed-height sheet would keep its size and push its own top
-    // off screen, which is why the title and first options were being cut off.
-    maxHeight: '88%',
+    // maxHeight and marginBottom are applied inline: both depend on the live
+    // keyboard height, which a static stylesheet cannot know.
     overflow: 'hidden',
   },
   // Padding lives on the scroll content, not the sheet: on the sheet it would

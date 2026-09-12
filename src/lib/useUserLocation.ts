@@ -35,6 +35,15 @@ export interface UserLocation {
 /** How long to wait for a fresh fix before giving up. */
 const FIX_TIMEOUT_MS = 8000;
 
+/**
+ * Live-tracking cadence. Deliberately coarse: the home map only needs to show
+ * roughly where the rider is, and a tight interval would wake the GPS
+ * constantly for a dot that moves a few pixels. Distance filtering does most
+ * of the work — standing still produces no updates at all.
+ */
+const WATCH_INTERVAL_MS = 5000;
+const WATCH_DISTANCE_M = 10;
+
 /** Resolves to null instead of hanging or rejecting past the deadline. */
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   return new Promise((resolve) => {
@@ -51,7 +60,13 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   });
 }
 
-export function useUserLocation() {
+/**
+ * @param watch  keep the position updating after the first fix. Off by default
+ *               because most callers want a one-shot "where am I" — leaving a
+ *               GPS subscription running on every screen that asks would cost
+ *               battery for nothing.
+ */
+export function useUserLocation(watch = false) {
   const [coord, setCoord] = useState<UserLocation | null>(null);
   const [status, setStatus] = useState<LocStatus>('idle');
 
@@ -107,6 +122,43 @@ export function useUserLocation() {
   useEffect(() => {
     fetchOnce();
   }, [fetchOnce]);
+
+  /**
+   * Live tracking. Starts only once permission has been granted, so it never
+   * triggers a second permission prompt, and tears the subscription down on
+   * unmount — an orphaned watcher keeps the GPS awake for the life of the app.
+   */
+  useEffect(() => {
+    if (!watch || status !== 'granted') return;
+
+    let sub: Location.LocationSubscription | null = null;
+    let cancelled = false;
+
+    Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.Balanced,
+        timeInterval: WATCH_INTERVAL_MS,
+        distanceInterval: WATCH_DISTANCE_M,
+      },
+      (pos) => {
+        if (!alive.current) return;
+        setCoord({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+    )
+      .then((s) => {
+        // Unmounted while the subscription was being set up.
+        if (cancelled) s.remove();
+        else sub = s;
+      })
+      .catch(() => {
+        // A failed watcher is not fatal — the one-shot fix still stands.
+      });
+
+    return () => {
+      cancelled = true;
+      sub?.remove();
+    };
+  }, [watch, status]);
 
   /** True once we have stopped waiting — the caller should use its own default. */
   const resolved =

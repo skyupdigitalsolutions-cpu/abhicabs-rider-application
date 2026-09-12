@@ -18,7 +18,7 @@
  * to it rather than the other way round.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Dimensions, Pressable, StatusBar, StyleSheet, Text, View,
 } from 'react-native';
@@ -30,6 +30,8 @@ import {
 import { PromoStrip, type PromoMessage } from '../components/PromoStrip';
 import { SharedMap } from '../components/BookingShared';
 import { RideMode, RentalMode, AirportMode } from '../components/ServiceModes';
+import { ExploreVehicles } from '../components/ExploreVehicles';
+import { PromoBanner } from '../components/PromoBanner';
 import { useBookingDraft } from '../../../store/bookingDraft';
 import type { HomeScreenProps } from '../../../navigation/types';
 import { DEFAULT_CITY } from '../../../config/catalog';
@@ -41,6 +43,12 @@ type Tab = 'RIDE' | 'RENTAL' | 'AIRPORT';
 
 /** Approximate height of the Account / Your trips pills, for pin placement. */
 const TOP_PILL_H = 44;
+
+/** Bottom padding inside the sheet, clearing the floating tab bar. */
+const SHEET_BOTTOM_PAD = 140;
+
+/** Gap between the booking card and the sheet edge, so the dark shows through. */
+const CARD_GUTTER = 12;
 
 /**
  * What the strip above the sheet cycles through.
@@ -60,7 +68,7 @@ const PROMOS: PromoMessage[] = [
 
 export function HomeScreen({ navigation }: HomeScreenProps) {
   const { coord: userLoc, status: locStatus, resolved: locResolved, refresh: refreshLocation } =
-    useUserLocation();
+    useUserLocation(true); // live: the blue dot tracks the rider
 
   /**
    * The map ALWAYS gets a centre.
@@ -108,23 +116,66 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   }, []);
 
   /**
+   * Where the map should put the pin. Changing this moves the map; leaving it
+   * alone lets the rider drag freely.
+   */
+  const [followTarget, setFollowTarget] = useState<{ lat: number; lng: number } | null>(null);
+
+  /** Coordinate the MAP last reported, so we can tell its updates from search's. */
+  const lastFromMap = useRef<string | null>(null);
+  const coordKey = (p: { lat: number; lng: number }) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`;
+
+  /**
    * The map settled somewhere new. Reverse geocoding has already run, so this
    * is a resolved place. placeId is null because it came from a coordinate,
    * not from a search result — downstream code keys off lat/lng anyway.
    */
   const onPinSettled = useCallback(
     (p: { lat: number; lng: number; label: string }) => {
+      lastFromMap.current = coordKey(p);
       setPickup({ label: p.label, lat: p.lat, lng: p.lng, placeId: null });
     },
     [setPickup],
   );
 
   /**
-   * What the map should follow. Pickup wins over device location so that
-   * picking a place from search moves the pin there, and so returning to this
-   * screen does not silently reset a pickup the rider already chose.
+   * Drop the pin on the rider as soon as we have a real fix — once only.
+   *
+   * This is the case the old rule got wrong. It followed `pickup` whenever
+   * pickup existed, but the map sets pickup on its very first idle. If
+   * location was still resolving at that moment, the pin settled on the city
+   * fallback, pickup was written, and from then on pickup "won" forever — so
+   * the rider's actual location arriving seconds later changed nothing.
+   *
+   * Guarded by a ref rather than by `pickup` being empty, so it fires exactly
+   * once and never yanks the map back after the rider has started dragging.
    */
-  const mapFollow = pickup ? { lat: pickup.lat, lng: pickup.lng } : mapCentre;
+  const snappedToUser = useRef(false);
+  useEffect(() => {
+    if (snappedToUser.current || !userLoc) return;
+    snappedToUser.current = true;
+    setFollowTarget({ lat: userLoc.lat, lng: userLoc.lng });
+  }, [userLoc]);
+
+  /**
+   * Follow a pickup that came from somewhere OTHER than the map — i.e. a
+   * search result. Without the check the map would chase its own output:
+   * drag -> pickup -> follow -> drag.
+   */
+  useEffect(() => {
+    if (!pickup) return;
+    const key = coordKey(pickup);
+    if (lastFromMap.current === key) return;
+    setFollowTarget({ lat: pickup.lat, lng: pickup.lng });
+  }, [pickup?.lat, pickup?.lng]);
+
+  /** Recentre on the rider — the standard "locate me" affordance. */
+  const recentreOnUser = useCallback(() => {
+    if (userLoc) setFollowTarget({ lat: userLoc.lat, lng: userLoc.lng });
+    else refreshLocation();
+  }, [userLoc, refreshLocation]);
+
+  const mapFollow = followTarget ?? mapCentre;
 
   const selectTab = (t: Tab) => {
     setTab(t);
@@ -149,6 +200,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           approximate={usingFallback}
           onRetryLocation={locStatus === 'denied' ? undefined : refreshLocation}
           pickupMode
+          // The dot must show the DEVICE, not the pin. Null while we only have
+          // a city-level guess, so no dot is drawn rather than a wrong one.
+          userLocation={usingFallback ? null : userLoc}
           pinOffsetY={pinOffsetY}
           onPickupChange={onPinSettled}
           onResolvingChange={setResolving}
@@ -165,6 +219,20 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             <Text style={styles.topPillText}>Your trips</Text>
           </Pressable>
         </View>
+      ) : null}
+
+      {/* Locate-me. Once the rider drags the pin away from themselves there
+          is otherwise no way back short of searching their own address. */}
+      {sheetSnap !== 'full' ? (
+        <Pressable
+          style={styles.locateBtn}
+          onPress={recentreOnUser}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Centre the map on my location"
+        >
+          <Text style={styles.locateGlyph}>◎</Text>
+        </Pressable>
       ) : null}
 
       {/* Resolved pickup address, sitting just above the sheet. Hidden when
@@ -187,10 +255,43 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         onSnap={setSheetSnap}
         contentContainerStyle={styles.sheetContent}
         banner={<PromoStrip messages={PROMOS} />}
+        // Dark surface so the booking form can sit on it as a white card with
+        // all four corners rounded. The sheet itself can only round its top —
+        // its bottom edge runs off the screen — so a rounded-bottom booking
+        // area has to be a separate view on a contrasting background.
+        surfaceStyle={styles.sheetSurface}
+        showHandle={false}
       >
-        {tab === 'RIDE' ? <RideMode navigation={navigation} /> : null}
-        {tab === 'RENTAL' ? <RentalMode navigation={navigation} /> : null}
-        {tab === 'AIRPORT' ? <AirportMode navigation={navigation} /> : null}
+        <View style={styles.bookingCard}>
+          {tab === 'RIDE' ? <RideMode navigation={navigation} /> : null}
+          {tab === 'RENTAL' ? <RentalMode navigation={navigation} /> : null}
+          {tab === 'AIRPORT' ? <AirportMode navigation={navigation} /> : null}
+        </View>
+
+        {/* Below the booking card, so it is reachable by expanding the sheet
+            without ever competing with the fields for attention. */}
+        <ExploreVehicles
+          onViewAll={() => navigation.navigate('Vehicles')}
+          edgeInset={CARD_GUTTER}
+          bottomInset={SHEET_BOTTOM_PAD}
+          footer={
+            <PromoBanner
+              title="Book Intercity"
+              subtitle={'Easy weekend trips\nto towns near by'}
+              // Add artwork at assets/promo/intercity.png, then:
+              //   image={require('../../../../assets/promo/intercity.png')}
+              image={require('../../../../assets/promo/banner-car.png')}
+              glyph="🚗"
+              onPress={() => {
+                // Intercity is a long one-way, so this drops the rider into
+                // the Ride tab already in ONE_WAY rather than opening a
+                // separate flow that would need its own quote path.
+                selectTab('RIDE');
+                setTripType('ONE_WAY');
+              }}
+            />
+          }
+        />
       </DraggableSheet>
 
       <View style={styles.tabBar}>
@@ -227,6 +328,20 @@ const styles = StyleSheet.create({
   },
   topPillText: { ...type.label, color: colors.text },
 
+  locateBtn: {
+    position: 'absolute',
+    right: spacing.lg,
+    // Parked just above the address chip, which sits above the sheet.
+    bottom: SCREEN_H - Math.round(SCREEN_H * SHEET_SNAP_HALF) + SHEET_BANNER_HEIGHT + 72,
+    zIndex: 15,
+    width: 44, height: 44, borderRadius: 22,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000', shadowOpacity: 0.16, shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
+    elevation: 6,
+  },
+  locateGlyph: { fontSize: 22, color: colors.text, lineHeight: 26 },
+
   addressChip: {
     position: 'absolute',
     left: spacing.lg, right: spacing.lg,
@@ -245,7 +360,24 @@ const styles = StyleSheet.create({
   },
   addressText: { ...type.label, flex: 1, color: colors.text },
 
-  sheetContent: { padding: spacing.xl, paddingTop: spacing.sm, paddingBottom: 140, gap: spacing.lg },
+  // The sheet is dark; the white card carries its own padding, so this only
+  // needs the gutter that lets the dark show around it.
+  sheetSurface: { backgroundColor: colors.text },
+  sheetContent: {
+    paddingHorizontal: CARD_GUTTER,
+    // Tight to the top now the 40px handle row is gone. Not tighter than
+    // this, though: the sheet's top corners have a 28px radius, so near the
+    // very top its edges curve inward by more than the 12px gutter and the
+    // card's corners would visibly poke outside them. At 10px the corner is
+    // inset 6.6px, leaving the card ~5px of clearance.
+    paddingTop: 10,
+    paddingBottom: SHEET_BOTTOM_PAD,
+  },
+  bookingCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 24,
+    padding: spacing.xl,
+  },
   brandStrip: { backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center', marginBottom: spacing.xs },
   brandText: { ...type.display, fontSize: 22, color: colors.primaryText, fontWeight: '800' },
 
