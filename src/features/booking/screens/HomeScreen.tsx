@@ -169,12 +169,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     setFollowTarget({ lat: pickup.lat, lng: pickup.lng });
   }, [pickup?.lat, pickup?.lng]);
 
-  /** Recentre on the rider — the standard "locate me" affordance. */
-  const recentreOnUser = useCallback(() => {
-    if (userLoc) setFollowTarget({ lat: userLoc.lat, lng: userLoc.lng });
-    else refreshLocation();
-  }, [userLoc, refreshLocation]);
-
   const mapFollow = followTarget ?? mapCentre;
 
   const selectTab = (t: Tab) => {
@@ -219,20 +213,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             <Text style={styles.topPillText}>Your trips</Text>
           </Pressable>
         </View>
-      ) : null}
-
-      {/* Locate-me. Once the rider drags the pin away from themselves there
-          is otherwise no way back short of searching their own address. */}
-      {sheetSnap !== 'full' ? (
-        <Pressable
-          style={styles.locateBtn}
-          onPress={recentreOnUser}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Centre the map on my location"
-        >
-          <Text style={styles.locateGlyph}>◎</Text>
-        </Pressable>
       ) : null}
 
       {/* Resolved pickup address, sitting just above the sheet. Hidden when
@@ -327,20 +307,6 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 3,
   },
   topPillText: { ...type.label, color: colors.text },
-
-  locateBtn: {
-    position: 'absolute',
-    right: spacing.lg,
-    // Parked just above the address chip, which sits above the sheet.
-    bottom: SCREEN_H - Math.round(SCREEN_H * SHEET_SNAP_HALF) + SHEET_BANNER_HEIGHT + 72,
-    zIndex: 15,
-    width: 44, height: 44, borderRadius: 22,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000', shadowOpacity: 0.16, shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
-    elevation: 6,
-  },
-  locateGlyph: { fontSize: 22, color: colors.text, lineHeight: 26 },
 
   addressChip: {
     position: 'absolute',
