@@ -22,7 +22,7 @@ import { vehicleClassInfo } from '../../../config/catalog';
 import { AbhiApiError } from '../../../types/api';
 import type { FareOptionsScreenProps } from '../../../navigation/types';
 import type { FareOption, PaymentMode } from '../../../types/domain';
-import { colors, radius, spacing, type } from '../../../theme';
+import { colors, layout, radius, spacing, type } from '../../../theme';
 
 const PAYMENT_MODES: { key: PaymentMode; label: string; hint: string }[] = [
   { key: 'FULL', label: 'Pay full', hint: 'Pay the whole fare now' },
@@ -250,7 +250,13 @@ function ErrorCard({ message, onRetry }: { message: string; onRetry: () => void 
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.xl, paddingBottom: 140 },
+  content: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: layout.screenPaddingY,
+    // Not screenPaddingY: a fixed CTA bar is pinned over the bottom of this
+    // screen, so the last card needs clearance to scroll clear of it.
+    paddingBottom: 140,
+  },
   heading: { ...type.title, color: colors.text },
   sub: { ...type.body, color: colors.textMuted, marginTop: spacing.xs },
   sectionLabel: { ...type.label, color: colors.textMuted, marginBottom: spacing.xs },

@@ -1,199 +1,279 @@
 /**
  * src/features/booking/screens/VehiclesScreen.tsx
  *
- * The full fleet, reached from "View all" on the home screen. Two vehicles per
- * row; tapping one opens a detail sheet with every angle at full width.
+ * The full fleet as full-width spec cards: badge and name top-left, the vehicle
+ * overhanging the right edge, a chip row along the bottom. Tapping one opens a
+ * dark-glass hero sheet.
  *
  * ---------------------------------------------------------------------------
- * WHAT MAKES THE CARD READ AS A PRODUCT RATHER THAN A LIST ROW
+ * WHY WIDE CARDS RATHER THAN A GRID
  * ---------------------------------------------------------------------------
- * Three things, in order of how much they do:
+ * A two-column grid gives each vehicle about 160pt — enough to identify it, not
+ * enough to admire it. These cards give the artwork roughly half the screen and
+ * let it run past the right edge, which is what makes a vehicle read as a
+ * product shot instead of a catalogue thumbnail.
  *
- *  1. A SPOTLIGHT behind the artwork — a soft amber ellipse that lifts the
- *     vehicle off the panel. Cut-out PNGs on a flat dark fill look like they
- *     are floating in nothing; a ground glow gives them somewhere to sit.
- *  2. A GRADIENT fill rather than a single colour, so the card has a top-lit
- *     direction instead of reading as a grey rectangle.
- *  3. SPEC CHIPS instead of sentences. Seats and luggage are the two questions
- *     riders actually have, and chips let them be compared down the column at a
- *     glance rather than re-read per card.
+ * ---------------------------------------------------------------------------
+ * WHY THE CARDS ARE LIGHT ON A DARK SCREEN
+ * ---------------------------------------------------------------------------
+ * The inversion is doing real work. These vehicle PNGs are dark-bodied, and a
+ * dark car on a dark pane loses its edges; a white card gives it something to
+ * cut against. It also puts the chip row on a light ground, where small grey
+ * text is far easier to read than white-on-translucent at 11pt.
  *
- * Tapping a vehicle opens DETAILS, not a booking. The fare a rider is offered
- * depends on the route, the time and the trip type, none of which exist yet at
- * this point — availability and price are decided on the Choose ride screen,
- * against a real route.
+ * The dark glass is still the app's material — it is what the screen chrome and
+ * the detail sheet are made of. The cards are the exception, and being the
+ * exception is precisely why they draw the eye.
  */
 
-import { useState } from 'react';
-import { Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useHeaderHeight } from '@react-navigation/elements';
+import { useMemo, useState } from 'react';
+import { Dimensions, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { VEHICLES, type VehicleShowcase } from '../../../config/vehicles';
-import { VehicleGallery } from '../components/VehicleGallery';
+import { GlassPanel } from '../components/GlassPanel';
 import { VehicleDetailSheet } from '../components/VehicleDetailSheet';
 import type { VehiclesScreenProps } from '../../../navigation/types';
-import { colors, radius, spacing, type } from '../../../theme';
+import { colors, layout, radius, spacing, type } from '../../../theme';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
-/** Screen padding, the gap between the two columns, and the card's own padding. */
 const EDGE = spacing.lg;
-const GAP = spacing.md;
-const CARD_PAD = spacing.md;
+const CARD_W = SCREEN_W - EDGE * 2;
+const CARD_H = 152;
 
-/** One column, and the usable width inside it once padding and border are off. */
-const CARD_W = Math.floor((SCREEN_W - EDGE * 2 - GAP) / 2);
-const GALLERY_W = CARD_W - CARD_PAD * 2 - 2;
+type FilterKey = 'ALL' | 'CARS' | 'GROUP';
 
-export function VehiclesScreen(_props: VehiclesScreenProps) {
-  /** The vehicle whose detail sheet is open. null = closed. */
+const FILTERS: { key: FilterKey; label: string }[] = [
+  { key: 'ALL', label: 'All' },
+  { key: 'CARS', label: 'Cars' },
+  { key: 'GROUP', label: 'Groups' },
+];
+
+function matches(v: VehicleShowcase, f: FilterKey): boolean {
+  if (f === 'ALL') return true;
+  if (f === 'CARS') return v.seats <= 4;
+  return v.seats > 4;
+}
+
+export function VehiclesScreen({ navigation }: VehiclesScreenProps) {
   const [selected, setSelected] = useState<VehicleShowcase | null>(null);
+  const [filter, setFilter] = useState<FilterKey>('ALL');
 
-  /**
-   * The header is transparent, so content would otherwise start underneath the
-   * back arrow. Asking the navigator for its height covers the status bar and
-   * the notch without hardcoding a number per device.
-   */
-  const headerHeight = useHeaderHeight();
+  const shown = useMemo(() => VEHICLES.filter((v) => matches(v, filter)), [filter]);
 
   return (
     <View style={styles.root}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: headerHeight + spacing.sm }]}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <Text style={styles.eyebrow}>ABHICABS</Text>
         <Text style={styles.title}>Our fleet</Text>
         <Text style={styles.intro}>
-          Tap any vehicle to see it from every angle. Prices depend on your route and timing —
-          you will pick a vehicle once your trip is entered.
+          Tap any vehicle to see it from every angle. Prices depend on your route and timing.
         </Text>
 
-        <View style={styles.grid}>
-          {VEHICLES.map((v) => (
-            <VehicleCardLarge key={v.key} vehicle={v} onPress={() => setSelected(v)} />
+        <View style={styles.filters}>
+          {FILTERS.map((f) => {
+            const active = f.key === filter;
+            return (
+              <Pressable
+                key={f.key}
+                onPress={() => setFilter(f.key)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+              >
+                {active ? (
+                  <View style={[styles.filter, styles.filterActive]}>
+                    <Text style={[styles.filterText, styles.filterTextActive]}>{f.label}</Text>
+                  </View>
+                ) : (
+                  <GlassPanel cornerRadius={radius.pill} style={styles.filter}>
+                    <Text style={styles.filterText}>{f.label}</Text>
+                  </GlassPanel>
+                )}
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <View style={styles.list}>
+          {shown.map((v) => (
+            <ShowcaseCard key={v.key} vehicle={v} onPress={() => setSelected(v)} />
           ))}
         </View>
+
+        {shown.length === 0 ? (
+          <Text style={styles.empty}>No vehicles in this category yet.</Text>
+        ) : null}
       </ScrollView>
 
-      <VehicleDetailSheet vehicle={selected} onClose={() => setSelected(null)} />
+      <VehicleDetailSheet
+        vehicle={selected}
+        onClose={() => setSelected(null)}
+        onBook={() => {
+          setSelected(null);
+          // Back to Home, where a route can actually be entered. Price and
+          // availability are decided there, against a real trip.
+          navigation.navigate('Home');
+        }}
+      />
     </View>
   );
 }
 
-function VehicleCardLarge({
+function ShowcaseCard({
   vehicle,
   onPress,
 }: {
   vehicle: VehicleShowcase;
   onPress: () => void;
 }) {
+  // The card shows one shot; every angle lives in the detail sheet.
+  const hero = vehicle.angles[0]?.source ?? vehicle.image;
+  const multi = vehicle.angles.length > 1;
+
   return (
     <Pressable
-      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
       onPress={onPress}
+      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
       accessibilityRole="button"
       accessibilityLabel={`${vehicle.name}, ${vehicle.seats} seats, ${vehicle.luggage}. See details.`}
     >
-      <LinearGradient
-        // Top-lit: a shade above the panel at the top falling to a shade below
-        // it at the bottom. Subtle on purpose — enough to give the card a
-        // direction without turning it into a button.
-        colors={['#262626', '#171717']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={styles.cardFill}
-      >
-        {/* Soft ground glow under the artwork. pointerEvents none so it never
-            steals the swipe from the gallery sitting on top of it. */}
-        <View style={styles.spotlight} pointerEvents="none" />
+      {/* Artwork first so the text layer paints over it. Pushed right and
+          allowed to overhang the card edge — the crop is what makes it read as
+          a product shot rather than a centred thumbnail. */}
+      {hero ? (
+        <Image source={hero} style={styles.hero} resizeMode="contain" />
+      ) : (
+        <Text style={styles.heroGlyph}>{vehicle.glyph}</Text>
+      )}
 
-        <VehicleGallery
-          angles={vehicle.angles}
-          glyph={vehicle.glyph}
-          width={GALLERY_W}
-          height={96}
-        />
+      <View style={styles.cardTop}>
+        {/* A small mark in the corner, the way a spec sheet is headed by the
+            maker's badge. Kept monochrome so it never competes with the
+            vehicle beside it. */}
+        <Text style={styles.mark}>🚕</Text>
 
-        <Text style={styles.name} numberOfLines={1}>
+        <Text style={styles.name} numberOfLines={2}>
           {vehicle.name}
         </Text>
-        <Text style={styles.blurb} numberOfLines={2}>
-          {vehicle.blurb}
-        </Text>
+      </View>
 
-        <View style={styles.chips}>
-          <View style={styles.chip}>
-            <Text style={styles.chipText}>👤 {vehicle.seats}</Text>
-          </View>
-          <View style={styles.chip}>
-            <Text style={styles.chipText} numberOfLines={1}>
-              🧳 {vehicle.luggage}
-            </Text>
-          </View>
+      <View style={styles.chipRow}>
+        <View style={styles.chip}>
+          <Text style={styles.chipText}>👤 {vehicle.seats} Seat{vehicle.seats === 1 ? '' : 's'}</Text>
         </View>
-      </LinearGradient>
+
+        <View style={styles.chip}>
+          <Text style={styles.chipText} numberOfLines={1}>
+            🧳 {vehicle.luggage}
+          </Text>
+        </View>
+
+        {/* The accent chip. In a rental app this slot holds the price; here
+            there is none to show — a fare needs a route, a time and a trip
+            type, none of which exist yet — so it carries the angle count, which
+            is the thing tapping the card actually gets you. */}
+        <View style={styles.chipAccent}>
+          <Text style={styles.chipAccentText}>{multi ? `${vehicle.angles.length} views` : 'Details'}</Text>
+        </View>
+      </View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.text, paddingTop:16 },
-  content: { paddingHorizontal: EDGE, paddingBottom: spacing.xxl },
+  root: { flex: 1, backgroundColor: '#0A0A0C' },
 
-  title: { ...type.display, fontSize: 24, color: '#FFFFFF' },
+  content: {
+    paddingHorizontal: EDGE,
+    // The header is transparent, so content must start below the back arrow.
+    paddingTop: layout.headerOffset + layout.screenPaddingY,
+    paddingBottom: layout.screenPaddingY,
+  },
+
+  eyebrow: {
+    ...type.caption,
+    fontSize: 11,
+    letterSpacing: 1.6,
+    fontWeight: '700',
+    color: colors.primary,
+    marginBottom: spacing.xs,
+  },
+  title: { ...type.display, fontSize: 30, color: '#FFFFFF' },
   intro: {
     ...type.caption,
-    color: 'rgba(255,255,255,0.6)',
-    lineHeight: 17,
-    marginTop: spacing.xs,
-    marginBottom: spacing.xl,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.55)',
+    lineHeight: 19,
+    marginTop: spacing.sm,
   },
 
-  grid: {
+  filters: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: GAP,
+    gap: spacing.sm,
+    marginTop: spacing.xl,
+    marginBottom: spacing.lg,
   },
+  filter: { paddingVertical: 7, paddingHorizontal: spacing.lg, borderRadius: radius.pill },
+  filterActive: { backgroundColor: colors.primary },
+  filterText: { ...type.caption, fontSize: 12, color: 'rgba(255,255,255,0.8)', fontWeight: '600' },
+  filterTextActive: { color: colors.primaryText, fontWeight: '700' },
+
+  list: { gap: spacing.lg },
 
   card: {
     width: CARD_W,
+    height: CARD_H,
     borderRadius: radius.lg,
-    // Clip the gradient and the spotlight to the rounded corners.
-    overflow: 'hidden',
-    borderWidth: 1,
-    // The amber-tinted hairline is what separates card from panel: #1E1E1E on
-    // #111111 is only a few shades apart and blurs together in daylight.
-    borderColor: '#F6C31833',
+    // White, against the dark screen. The inversion is the whole point: a light
+    // card is what lets a dark vehicle read, and vice versa.
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    justifyContent: 'space-between',
+    // overflow stays visible so the artwork can overhang the right edge.
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 5,
   },
-  cardPressed: { opacity: 0.75 },
-  cardFill: { padding: CARD_PAD },
+  cardPressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },
 
-  spotlight: {
+  hero: {
     position: 'absolute',
-    // Sits under where the vehicle's wheels land, bleeding past the card edges
-    // so it reads as light rather than as a shape.
-    top: 58,
-    left: -CARD_W * 0.15,
-    right: -CARD_W * 0.15,
-    height: 78,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,193,7,0.10)',
+    right: -spacing.sm,
+    top: spacing.xs,
+    width: CARD_W * 0.58,
+    height: CARD_H * 0.62,
   },
+  heroGlyph: { position: 'absolute', right: spacing.xl, top: spacing.lg, fontSize: 48 },
 
-  name: { ...type.label, fontSize: 15, color: '#FFFFFF', marginTop: spacing.md },
-  blurb: {
-    ...type.caption,
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.5)',
-    lineHeight: 15,
-    marginTop: 2,
-    // Two lines reserved so the chip rows line up across a mismatched pair.
-    minHeight: 30,
-  },
+  cardTop: { paddingRight: CARD_W * 0.45 },
+  mark: { fontSize: 18, marginBottom: spacing.xs },
+  name: { ...type.title, fontSize: 19, color: colors.text, lineHeight: 24 },
 
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: spacing.sm },
+  chipRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   chip: {
-    backgroundColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: colors.surfaceAlt,
     borderRadius: radius.pill,
-    paddingVertical: 3,
-    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    paddingHorizontal: spacing.md,
+    flexShrink: 1,
   },
-  chipText: { ...type.caption, fontSize: 10, color: 'rgba(255,255,255,0.82)', fontWeight: '600' },
+  chipText: { ...type.caption, fontSize: 11, color: colors.textMuted, fontWeight: '600' },
+
+  chipAccent: {
+    marginLeft: 'auto',
+    backgroundColor: 'rgba(255,193,7,0.22)',
+    borderRadius: radius.pill,
+    paddingVertical: 6,
+    paddingHorizontal: spacing.md,
+  },
+  chipAccentText: { ...type.caption, fontSize: 11, color: '#8A6D0B', fontWeight: '700' },
+
+  empty: {
+    ...type.body,
+    color: 'rgba(255,255,255,0.45)',
+    textAlign: 'center',
+    marginTop: spacing.xxl,
+  },
 });

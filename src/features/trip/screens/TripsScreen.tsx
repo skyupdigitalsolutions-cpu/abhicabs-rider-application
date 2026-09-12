@@ -11,7 +11,7 @@ import {
 import { useTripHistory } from '../history.api';
 import type { TripsScreenProps } from '../../../navigation/types';
 import type { BookingListItem, BookingStatus } from '../../../types/domain';
-import { colors, radius, spacing, type } from '../../../theme';
+import { colors, layout, radius, spacing, type } from '../../../theme';
 
 export function TripsScreen({ navigation }: TripsScreenProps) {
   const {
@@ -136,7 +136,11 @@ function formatWhen(iso: string): string {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.lg, gap: spacing.md },
+  content: {
+    paddingHorizontal: layout.screenPaddingX,
+    paddingVertical: layout.screenPaddingY,
+    gap: spacing.md,
+  },
   center: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl },
   centerText: { ...type.body, color: colors.textMuted, textAlign: 'center' },
   emptyTitle: { ...type.title, color: colors.text },

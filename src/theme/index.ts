@@ -7,6 +7,11 @@
  * contrast without introducing new hues. Light theme (white background).
  */
 
+import { Platform, StatusBar } from 'react-native';
+
+/** Height of the navigation header bar itself, excluding the status bar. */
+const HEADER_BAR_H = 56;
+
 export const colors = {
   // surfaces
   bg: '#FFFFFF',
@@ -51,6 +56,38 @@ export const type = {
   body: { fontSize: 16, fontWeight: '400' as const },
   label: { fontSize: 14, fontWeight: '600' as const },
   caption: { fontSize: 12, fontWeight: '400' as const },
+} as const;
+
+/**
+ * Screen-level padding, shared by every scrollable page so they all start and
+ * end at the same distance from the edge.
+ *
+ * Defined here rather than repeated per screen because that repetition is
+ * exactly how the drift happened: some screens reached for spacing.lg and
+ * others for spacing.xl, so the top of the content jumped as the rider moved
+ * between them. Changing this one value now moves every page together.
+ *
+ * The value matches the Account screen, which is the reference.
+ */
+export const layout = {
+  screenPaddingY: spacing.lg,
+  screenPaddingX: spacing.lg,
+
+  /**
+   * How far down a screen with a TRANSPARENT header must start so its content
+   * clears the floating back arrow.
+   *
+   * Computed from the status bar rather than read from useHeaderHeight(): that
+   * hook needs a SafeAreaProvider above it, which this app does not mount, so
+   * it reports 0 and the content slides under the arrow. StatusBar.currentHeight
+   * is the same approach HomeScreen already uses for its own overlay chrome, so
+   * the two agree by construction.
+   *
+   * Android reports a real status bar height; iOS returns undefined, so the
+   * fallback is a notch-safe default.
+   */
+  headerOffset:
+    (Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) : 47) + HEADER_BAR_H,
 } as const;
 
 export const button = {

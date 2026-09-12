@@ -150,7 +150,9 @@ const styles = StyleSheet.create({
   angleChip: {
     position: 'absolute',
     left: 0,
-    bottom: 0,
+    // Top rather than bottom: the detail sheet draws a lit ring under the
+    // vehicle, and a chip sitting in it looked like debris on the turntable.
+    top: 0,
     maxWidth: '80%',
     backgroundColor: 'rgba(0,0,0,0.45)',
     borderRadius: radius.pill,

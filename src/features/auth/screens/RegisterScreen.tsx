@@ -18,7 +18,7 @@ import {
 import { useRegister } from '../api';
 import { AbhiApiError } from '../../../types/api';
 import type { RegisterScreenProps } from '../../../navigation/types';
-import { colors, radius, spacing, type } from '../../../theme';
+import { colors, layout, radius, spacing, type } from '../../../theme';
 
 // Mirror the backend validators exactly (src/validators/schemas.js).
 const RULES = {
@@ -182,7 +182,11 @@ function Field(props: {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxl },
+  content: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: layout.screenPaddingY,
+    gap: spacing.md,
+  },
   header: { marginBottom: spacing.sm },
   title: { ...type.title, color: colors.text },
   subtitle: { ...type.body, color: colors.textMuted, marginTop: spacing.xs },

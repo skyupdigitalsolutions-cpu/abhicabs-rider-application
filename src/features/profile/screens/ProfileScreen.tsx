@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSession } from '../../../store/session';
 import type { ProfileScreenProps } from '../../../navigation/types';
-import { colors, radius, spacing, type } from '../../../theme';
+import { colors, layout, radius, spacing, type } from '../../../theme';
 
 export function ProfileScreen({ navigation }: ProfileScreenProps) {
   const user = useSession((s) => s.user);
@@ -63,7 +63,11 @@ export function ProfileScreen({ navigation }: ProfileScreenProps) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.lg, gap: spacing.md },
+  content: {
+    paddingHorizontal: layout.screenPaddingX,
+    paddingVertical: layout.screenPaddingY,
+    gap: spacing.md,
+  },
 
   card: {
     backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,

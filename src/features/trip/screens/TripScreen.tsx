@@ -23,7 +23,7 @@ import { DraggableSheet, type SnapName } from '../../booking/components/Draggabl
 import { isTerminal } from '../../../types/domain';
 import type { TripScreenProps } from '../../../navigation/types';
 import type { BookingStatus, BookingSummary } from '../../../types/domain';
-import { colors, radius, spacing, type } from '../../../theme';
+import { colors, layout, radius, spacing, type } from '../../../theme';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 
@@ -681,7 +681,9 @@ const styles = StyleSheet.create({
   // Padding lives on the scroll content, not the sheet: on the sheet it would
   // clip the scrollable area and the last option would sit under the edge.
   reasonScrollBody: {
-    padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: layout.screenPaddingY,
+    gap: spacing.sm,
   },
   reasonTitle: { ...type.title, color: colors.text },
   reasonSubtitle: { ...type.caption, color: colors.textMuted, marginBottom: spacing.sm },
@@ -706,9 +708,22 @@ const styles = StyleSheet.create({
   reasonKeep: { paddingVertical: spacing.md, alignItems: 'center' },
   reasonKeepText: { ...type.body, color: colors.textMuted },
   root: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.xl, paddingTop: TOP_OFFSET + 52, gap: spacing.lg, paddingBottom: spacing.xxl + 56 },
+  content: {
+    paddingHorizontal: spacing.xl,
+    // Clears the map header overlaying the top of this screen.
+    paddingTop: TOP_OFFSET + 52,
+    gap: spacing.lg,
+    // Clears the fixed action bar pinned over the bottom.
+    paddingBottom: layout.screenPaddingY + 56,
+  },
   mapLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-  sheetContent: { padding: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.xxl + 56, gap: spacing.lg },
+  sheetContent: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: layout.screenPaddingY,
+    // Clears the fixed action bar pinned over the bottom.
+    paddingBottom: layout.screenPaddingY + 56,
+    gap: spacing.lg,
+  },
   center: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
 
   topOverlay: {

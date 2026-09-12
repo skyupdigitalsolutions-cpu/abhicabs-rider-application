@@ -7,12 +7,15 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
+      "bundleIdentifier": "com.sjsjasss.abhicabsrider",
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "AbhiCabs uses your location to set your pickup point and track your ride."
-      },
-      "config": {
-        "googleMapsApiKey": "REPLACE_WITH_IOS_GOOGLE_MAPS_API_KEY"
+        "NSLocationWhenInUseUsageDescription": "AbhiCabs uses your location to set your pickup point and track your ride.",
+        "NSLocalNetworkUsageDescription": "AbhiCabs connects to your development server on the local network.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        },
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
