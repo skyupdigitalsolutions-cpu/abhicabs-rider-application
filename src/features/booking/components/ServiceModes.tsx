@@ -197,19 +197,31 @@ function GlassSegments<T extends string>({
  * Shouts in development when an icon has been wired up in a way that cannot
  * render, instead of failing to nothing.
  *
- * The SVG case is the one worth catching: Metro lists `svg` in assetExts by
- * default, so require('...svg') succeeds and returns a perfectly valid asset —
- * but React Native's <Image> has no SVG decoder, so it draws an empty box. A
- * silent blank is the worst possible feedback for a wiring mistake.
+ * The SVG case is the one worth catching: WITHOUT the transformer applied,
+ * Metro lists `svg` in assetExts, so require('...svg') succeeds and returns a
+ * perfectly valid asset — but React Native's <Image> has no SVG decoder, so it
+ * draws an empty box. A silent blank is the worst possible feedback for a
+ * wiring mistake.
+ *
+ * Detected from the resolved URI rather than an asset `type` field:
+ * ImageResolvedAssetSource only carries uri/width/height/scale, so reading
+ * `.type` is a type error. In dev the uri is a Metro URL with a query string
+ * appended, so this looks for the extension anywhere in the string rather than
+ * at the end.
+ *
+ * With the transformer wired up this is largely vestigial — svg has been moved
+ * out of assetExts, so an .svg can no longer reach iconSource as an asset at
+ * all. It stays as a guard against the transformer being removed later, and to
+ * catch a require() handed to `icon`.
  */
 function warnIfUnrenderable<T extends string>(option: Segment<T>) {
   if (option.iconSource && typeof option.iconSource === 'number') {
-    const asset = Image.resolveAssetSource(option.iconSource);
-    if (asset?.type === 'svg') {
+    const uri = Image.resolveAssetSource(option.iconSource)?.uri ?? '';
+    if (uri.toLowerCase().includes('.svg')) {
       console.warn(
-        `[GlassSegments] "${option.label}" points at an .svg. <Image> cannot ` +
-          'render SVG — export the icon as a PNG and use iconSource, or install ' +
-          'react-native-svg + react-native-svg-transformer and use renderIcon.',
+        `[GlassSegments] "${option.label}" points at an .svg via iconSource. ` +
+          '<Image> cannot render SVG — use renderIcon with the SVG imported as ' +
+          'a component, or export the icon as a PNG.',
       );
     }
   }
