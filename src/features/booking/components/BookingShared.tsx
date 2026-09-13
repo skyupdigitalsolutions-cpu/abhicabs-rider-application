@@ -16,6 +16,19 @@ import type { CarDot } from '../nearby.api';
 import { HomeMap } from './HomeMap';
 import { colors, radius, spacing, type } from '../../../theme';
 
+/**
+ * Route markers and the date icon, imported as COMPONENTS via
+ * react-native-svg-transformer. Not <Image source={require(...)}>: React Native
+ * cannot decode an .svg that way and silently draws an empty box.
+ */
+import PickupIcon from '../../../../assets/icons/pickup.svg';
+import DropIcon from '../../../../assets/icons/drop.svg';
+import StopIcon from '../../../../assets/icons/stop.svg';
+import CalendarIcon from '../../../../assets/icons/calendar.svg';
+
+/** Box the route markers are drawn in — matches the old badge diameter. */
+const MARKER_SIZE = 20;
+
 /* --------------------------------- Map ------------------------------------- */
 
 export function SharedMap(props: {
@@ -171,7 +184,10 @@ export function DateCard(props: {
   return (
     <>
       <Pressable style={styles.dateCard} onPress={open}>
-        <Text style={styles.dateIcon}>📅</Text>
+        {/* Same calendar as DateTile. The two are different layouts of one
+            control, so a different icon in each would read as a different
+            control. */}
+        <CalendarIcon width={18} height={18} fill={colors.textMuted} />
         <View style={{ flex: 1 }}>
           <Text style={styles.dateLabel}>{props.label}</Text>
           <Text style={styles.dateValue}>{formatWhen(date)}</Text>
@@ -223,7 +239,6 @@ export function formatWhen(d: Date): string {
 /** Warm near-black for the route pills. Deliberately not pure #111 — against
  *  amber, a warm dark reads as part of the same palette rather than a hole. */
 const PILL_INK = '#241F1A';
-const DROP_RED = '#E53935';
 const TILE_BG = '#FFF6DE';
 const TILE_BORDER = '#F2D488';
 
@@ -293,14 +308,16 @@ export function RoutePill(props: {
   return (
     <View style={styles.routePill}>
       <Pressable style={styles.routePillTap} onPress={props.onPress}>
+        {/* No `fill` on these three, deliberately. They are status markers —
+            pickup green, drop red — and the colour IS the information, so they
+            keep their own. That is the opposite of the tab icons, where the
+            glyph tracks the selected state. */}
         {props.kind === 'pickup' ? (
-          <Text style={styles.routeGlyph}>📍</Text>
+          <PickupIcon width={MARKER_SIZE} height={MARKER_SIZE} />
         ) : props.kind === 'drop' ? (
-          <View style={styles.dropBadge}>
-            <View style={styles.dropBar} />
-          </View>
+          <DropIcon width={MARKER_SIZE} height={MARKER_SIZE} />
         ) : (
-          <View style={styles.stopBadge} />
+          <StopIcon width={MARKER_SIZE} height={MARKER_SIZE} />
         )}
 
         <Text
@@ -414,7 +431,7 @@ export function DateTile(props: {
   return (
     <>
       <Pressable style={[styles.dateTile, props.full && styles.dateTileFull]} onPress={open}>
-        <Text style={styles.dateTileIcon}>📅</Text>
+        <CalendarIcon width={18} height={18} fill={colors.textMuted} />
         <View style={{ flex: 1 }}>
           <Text style={styles.dateTileLabel}>{props.label}</Text>
           <Text style={styles.dateTileValue} numberOfLines={1}>
@@ -489,16 +506,6 @@ const styles = StyleSheet.create({
     paddingLeft: spacing.lg, paddingRight: spacing.md, minHeight: 54,
   },
   routePillTap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 14 },
-  routeGlyph: { fontSize: 15, width: 20, textAlign: 'center' },
-  dropBadge: {
-    width: 20, height: 20, borderRadius: 10, backgroundColor: DROP_RED,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  dropBar: { width: 10, height: 2, borderRadius: 1, backgroundColor: '#FFFFFF' },
-  stopBadge: {
-    width: 14, height: 14, borderRadius: 7, marginHorizontal: 3,
-    borderWidth: 3, borderColor: colors.primary, backgroundColor: 'transparent',
-  },
   routeText: { ...type.body, color: '#FFFFFF', flex: 1 },
   routeTextPlaceholder: { color: 'rgba(255,255,255,0.55)' },
   routeTrailing: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingLeft: spacing.sm },
@@ -526,7 +533,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.md, paddingVertical: spacing.md, paddingHorizontal: spacing.md,
   },
   dateTileFull: { flex: 1 },
-  dateTileIcon: { fontSize: 18 },
   dateTileLabel: { ...type.caption, color: colors.textMuted, letterSpacing: 0.6, textTransform: 'uppercase' },
   dateTileValue: { ...type.label, fontSize: 15, color: colors.text, fontWeight: '700' },
 
@@ -566,7 +572,6 @@ const styles = StyleSheet.create({
   dateRow: { flexDirection: 'row', gap: spacing.md },
   dateCard: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.md },
   dateCardSpacer: { flex: 1 },
-  dateIcon: { fontSize: 18 },
   dateLabel: { ...type.caption, color: colors.textMuted },
   dateValue: { ...type.label, color: colors.primary, fontSize: 13 },
 

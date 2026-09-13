@@ -40,10 +40,27 @@ import {
   type GestureResponderEvent,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import type { SvgProps } from 'react-native-svg';
 import { VEHICLES } from '../../../config/vehicles';
 import { useClassFromPrices } from '../components/VehicleCategoryRow';
 import type { VehicleDetailScreenProps } from '../../../navigation/types';
 import { colors, layout, radius, spacing, type } from '../../../theme';
+
+/**
+ * Spec and info icons, imported as COMPONENTS via react-native-svg-transformer.
+ * Not <Image source={require(...)}>: React Native cannot decode an .svg that
+ * way and silently draws an empty box.
+ *
+ * seat / bag / car are the same three the Vehicles list uses — one glyph per
+ * concept across the app, so a seat always looks like a seat.
+ */
+import SeatIcon from '../../../../assets/icons/seat.svg';
+import BagIcon from '../../../../assets/icons/bag.svg';
+import CarIcon from '../../../../assets/icons/car.svg';
+import CameraIcon from '../../../../assets/icons/camera.svg';
+import PriceIcon from '../../../../assets/icons/price.svg';
+import DriverIcon from '../../../../assets/icons/driver.svg';
+import ShieldIcon from '../../../../assets/icons/shield.svg';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -54,6 +71,9 @@ const BAR_H = 104;
 const THUMB_LIMIT = 4;
 /** Inset between the tab track's edge and the pills inside it. */
 const TRACK_PAD = 4;
+
+/** Glyph size inside the spec and info discs. */
+const DISC_ICON = 16;
 
 type Tab = 'ABOUT' | 'GALLERY' | 'REVIEW';
 
@@ -392,10 +412,10 @@ function AboutTab({ vehicle }: { vehicle: (typeof VEHICLES)[number] }) {
 
       <SectionHeader title="Specifications" />
       <View style={styles.specGrid}>
-        <Spec icon="👤" label="Capacity" value={`${vehicle.seats}`} unit="seats" />
-        <Spec icon="🧳" label="Luggage" value={vehicle.luggage} />
-        <Spec icon="📷" label="Photos" value={`${vehicle.angles.length}`} unit="views" />
-        <Spec icon="🚕" label="Class" value={vehicle.name} />
+        <Spec Icon={SeatIcon} label="Capacity" value={`${vehicle.seats}`} unit="seats" />
+        <Spec Icon={BagIcon} label="Luggage" value={vehicle.luggage} />
+        <Spec Icon={CameraIcon} label="Photos" value={`${vehicle.angles.length}`} unit="views" />
+        <Spec Icon={CarIcon} label="Class" value={vehicle.name} />
       </View>
 
       <SectionHeader title="Good to know" />
@@ -405,17 +425,17 @@ function AboutTab({ vehicle }: { vehicle: (typeof VEHICLES)[number] }) {
           way to scan for the one they care about — the bold lead line does. */}
       <View style={styles.infoList}>
         <InfoRow
-          icon="💸"
+          Icon={PriceIcon}
           title="Route-based pricing"
           text="Your final fare depends on the route, timing and trip type you choose."
         />
         <InfoRow
-          icon="🧑‍✈️"
+          Icon={DriverIcon}
           title="Driver assigned after confirmation"
           text="We match you with a driver and vehicle once the booking is confirmed."
         />
         <InfoRow
-          icon="🛡️"
+          Icon={ShieldIcon}
           title="Free cancellation"
           text="Cancel at no charge up to 30 minutes before your pickup time."
         />
@@ -434,11 +454,22 @@ function SectionHeader({ title }: { title: string }) {
   );
 }
 
-function InfoRow({ icon, title, text }: { icon: string; title: string; text: string }) {
+function InfoRow({
+  Icon,
+  title,
+  text,
+}: {
+  Icon: React.FC<SvgProps>;
+  title: string;
+  text: string;
+}) {
   return (
     <View style={styles.infoRow}>
+      {/* Filled with the body text colour: the disc is a neutral grey, so the
+          glyph has to carry its own contrast rather than relying on the tint
+          behind it the way the amber spec discs do. */}
       <View style={styles.infoDisc}>
-        <Text style={styles.infoIcon}>{icon}</Text>
+        <Icon width={DISC_ICON} height={DISC_ICON} fill={colors.text} />
       </View>
       <View style={styles.infoText}>
         <Text style={styles.infoTitle}>{title}</Text>
@@ -639,22 +670,23 @@ function Stars({ value }: { value: number }) {
 }
 
 function Spec({
-  icon,
+  Icon,
   label,
   value,
   unit,
 }: {
-  icon: string;
+  Icon: React.FC<SvgProps>;
   label: string;
   value: string;
   unit?: string;
 }) {
   return (
     <View style={styles.spec}>
-      {/* The icon sits in a tinted disc. On a pale card a bare emoji reads as a
-          stray character; a disc makes it look placed. */}
+      {/* The glyph sits in a tinted disc, filled the same dark amber used by
+          every other accent on this screen so the disc and its contents read as
+          one object rather than a shape with something dropped into it. */}
       <View style={styles.specDisc}>
-        <Text style={styles.specIcon}>{icon}</Text>
+        <Icon width={DISC_ICON} height={DISC_ICON} fill="#8A6D0B" />
       </View>
       <Text style={styles.specLabel}>{label}</Text>
       <Text style={styles.specValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
@@ -803,7 +835,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: spacing.sm,
   },
-  specIcon: { fontSize: 16 },
   specLabel: {
     ...type.caption,
     fontSize: 10,
@@ -833,7 +864,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  infoIcon: { fontSize: 16 },
   infoText: { flex: 1 },
   infoTitle: { ...type.label, fontSize: 14, color: colors.text },
   infoBody: {

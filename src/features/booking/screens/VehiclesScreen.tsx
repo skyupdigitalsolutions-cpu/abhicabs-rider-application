@@ -33,11 +33,25 @@ import { VehicleCategoryRow, useClassFromPrices } from '../components/VehicleCat
 import type { VehiclesScreenProps } from '../../../navigation/types';
 import { colors, layout, radius, spacing, type } from '../../../theme';
 
+/**
+ * Card icons, imported as COMPONENTS via react-native-svg-transformer. Not
+ * <Image source={require(...)}>: React Native cannot decode an .svg that way
+ * and silently draws an empty box.
+ */
+import SeatIcon from '../../../../assets/icons/seat.svg';
+import BagIcon from '../../../../assets/icons/bag.svg';
+import CarIcon from '../../../../assets/icons/car.svg';
+
 const { width: SCREEN_W } = Dimensions.get('window');
 
 const EDGE = spacing.lg;
 const CARD_W = SCREEN_W - EDGE * 2;
 const CARD_H = 152;
+
+/** The maker's-badge mark in the card's top-left corner. */
+const MARK_SIZE = 20;
+/** Glyph size inside the spec chips — sized to the 11pt text beside it. */
+const CHIP_ICON = 13;
 
 export function VehiclesScreen({ navigation }: VehiclesScreenProps) {
   /** Which class the category row has filtered to. null = all. */
@@ -78,7 +92,6 @@ export function VehiclesScreen({ navigation }: VehiclesScreenProps) {
           <Text style={styles.empty}>No vehicles in this category yet.</Text>
         ) : null}
       </ScrollView>
-
     </View>
   );
 }
@@ -115,9 +128,12 @@ function ShowcaseCard({
 
       <View style={styles.cardTop}>
         {/* A small mark in the corner, the way a spec sheet is headed by the
-            maker's badge. Kept monochrome so it never competes with the
-            vehicle beside it. */}
-        <Text style={styles.mark}>🚕</Text>
+            maker's badge. Filled with the text colour rather than left to its
+            own, so it reads as typography and never competes with the vehicle
+            beside it. */}
+        <View style={styles.mark}>
+          <CarIcon width={MARK_SIZE} height={MARK_SIZE} fill={colors.text} />
+        </View>
 
         <Text style={styles.name} numberOfLines={2}>
           {vehicle.name}
@@ -125,13 +141,20 @@ function ShowcaseCard({
       </View>
 
       <View style={styles.chipRow}>
+        {/* The glyphs sit BESIDE the text, not inside it: an SVG component
+            cannot live inside <Text> the way an emoji could, so each chip is a
+            row rather than a single string. */}
         <View style={styles.chip}>
-          <Text style={styles.chipText}>👤 {vehicle.seats} Seat{vehicle.seats === 1 ? '' : 's'}</Text>
+          <SeatIcon width={CHIP_ICON} height={CHIP_ICON} fill={colors.textMuted} />
+          <Text style={styles.chipText}>
+            {vehicle.seats} Seat{vehicle.seats === 1 ? '' : 's'}
+          </Text>
         </View>
 
         <View style={styles.chip}>
+          <BagIcon width={CHIP_ICON} height={CHIP_ICON} fill={colors.textMuted} />
           <Text style={styles.chipText} numberOfLines={1}>
-            🧳 {vehicle.luggage}
+            {vehicle.luggage}
           </Text>
         </View>
 
@@ -211,11 +234,15 @@ const styles = StyleSheet.create({
   heroGlyph: { position: 'absolute', right: spacing.xl, top: spacing.lg, fontSize: 48 },
 
   cardTop: { paddingRight: CARD_W * 0.45 },
-  mark: { fontSize: 18, marginBottom: spacing.xs },
+  mark: { marginBottom: spacing.xs },
   name: { ...type.title, fontSize: 19, color: colors.text, lineHeight: 24 },
 
   chipRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   chip: {
+    // A row now that the glyph is a sibling of the label rather than part of it.
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     backgroundColor: colors.surfaceAlt,
     borderRadius: radius.pill,
     paddingVertical: 6,

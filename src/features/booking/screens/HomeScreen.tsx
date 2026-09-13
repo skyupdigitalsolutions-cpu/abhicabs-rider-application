@@ -46,6 +46,7 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import type { SvgProps } from 'react-native-svg';
 import { useNearbyCars } from '../nearby.api';
 import { useUserLocation } from '../../../lib/useUserLocation';
 import {
@@ -61,15 +62,40 @@ import type { HomeScreenProps } from '../../../navigation/types';
 import { DEFAULT_CITY } from '../../../config/catalog';
 import { colors, radius, spacing, type } from '../../../theme';
 
+/**
+ * Tab icons, imported as COMPONENTS via react-native-svg-transformer.
+ *
+ * Not <Image source={require(...)}>: React Native cannot decode an .svg that
+ * way and silently draws an empty box. These require the transformer wired into
+ * metro.config.js, a *.svg declaration in svg.d.ts (listed in tsconfig's
+ * `include`), and react-native-svg compiled into the dev client.
+ */
+import RideIcon from '../../../../assets/icons/ride.svg';
+import RentalIcon from '../../../../assets/icons/local.svg';
+import AirportIcon from '../../../../assets/icons/airport.svg';
+
 const { height: SCREEN_H } = Dimensions.get('window');
 
 type Tab = 'RIDE' | 'RENTAL' | 'AIRPORT';
 
-/** Tab order, shared by the bar and the sliding pill so they cannot disagree. */
-const TABS: { key: Tab; icon: string; label: string }[] = [
-  { key: 'RIDE', icon: '🚗', label: 'Ride' },
-  { key: 'RENTAL', icon: '⏱️', label: 'Rental' },
-  { key: 'AIRPORT', icon: '✈️', label: 'Airport' },
+/** Box the tab icon is drawn in. */
+const ICON_SIZE = 22;
+
+/**
+ * Tab order, shared by the bar and the sliding pill so they cannot disagree.
+ *
+ * `Icon` is a component rather than a rendered element so each tab can be given
+ * the live colour and size at render time — the glyph then tracks the selected
+ * state the same way the label does.
+ */
+const TABS: {
+  key: Tab;
+  label: string;
+  Icon: React.FC<SvgProps>;
+}[] = [
+  { key: 'RIDE', label: 'Ride', Icon: RideIcon },
+  { key: 'RENTAL', label: 'Rental', Icon: RentalIcon },
+  { key: 'AIRPORT', label: 'Airport', Icon: AirportIcon },
 ];
 
 /** Approximate height of the Account / Your trips pills, for pin placement. */
@@ -363,7 +389,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           {TABS.map((t) => (
             <TabButton
               key={t.key}
-              icon={t.icon}
+              Icon={t.Icon}
               label={t.label}
               active={tab === t.key}
               onPress={() => selectTab(t.key)}
@@ -383,7 +409,12 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
  * looks like the pill is passing over dead furniture rather than picking
  * something up.
  */
-function TabButton(props: { icon: string; label: string; active: boolean; onPress: () => void }) {
+function TabButton(props: {
+  Icon: React.FC<SvgProps>;
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
   const lift = useRef(new Animated.Value(props.active ? 1 : 0)).current;
 
   useEffect(() => {
@@ -398,17 +429,24 @@ function TabButton(props: { icon: string; label: string; active: boolean; onPres
   const scale = lift.interpolate({ inputRange: [0, 1], outputRange: [1, 1.14] });
   const translateY = lift.interpolate({ inputRange: [0, 1], outputRange: [0, -1] });
 
+  // The glyph takes the label's colour, so selecting a tab reads as one change
+  // rather than two. `fill` only bites if the .svg's paths carry no fill of
+  // their own — strip hardcoded fills from the artwork if an icon refuses to
+  // change between active and muted.
+  const { Icon } = props;
+  const tint = props.active ? colors.text : colors.textMuted;
+
   return (
     <Pressable style={styles.tabBtn} onPress={props.onPress} accessibilityRole="tab">
-      <Animated.Text
-        style={[
-          styles.tabIcon,
-          props.active && styles.tabIconActive,
-          { transform: [{ scale }, { translateY }] },
-        ]}
+      {/* The scale lives on a wrapper, not on the glyph: an Animated.Text could
+          carry it directly, but an SVG component cannot take an animated style,
+          so the transform has to sit on a View around it. */}
+      <Animated.View
+        style={[styles.tabIconWrap, { transform: [{ scale }, { translateY }] }]}
       >
-        {props.icon}
-      </Animated.Text>
+        <Icon width={ICON_SIZE} height={ICON_SIZE} fill={tint} />
+      </Animated.View>
+
       <Text style={[styles.tabLabel, props.active && styles.tabLabelActive]}>{props.label}</Text>
     </Pressable>
   );
@@ -519,8 +557,12 @@ const styles = StyleSheet.create({
   },
 
   tabBtn: { flex: 1, alignItems: 'center', paddingVertical: spacing.sm, gap: 2 },
-  tabIcon: { fontSize: 20, opacity: 0.45 },
-  tabIconActive: { opacity: 1 },
+  tabIconWrap: {
+    width: ICON_SIZE,
+    height: ICON_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   tabLabel: { ...type.caption, color: colors.textMuted },
   tabLabelActive: { color: colors.text, fontWeight: '700' },
 });
