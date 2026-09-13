@@ -29,8 +29,7 @@
 import { useMemo, useState } from 'react';
 import { Dimensions, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { VEHICLES, type VehicleShowcase } from '../../../config/vehicles';
-import { GlassPanel } from '../components/GlassPanel';
-import { VehicleDetailSheet } from '../components/VehicleDetailSheet';
+import { VehicleCategoryRow, useClassFromPrices } from '../components/VehicleCategoryRow';
 import type { VehiclesScreenProps } from '../../../navigation/types';
 import { colors, layout, radius, spacing, type } from '../../../theme';
 
@@ -40,25 +39,18 @@ const EDGE = spacing.lg;
 const CARD_W = SCREEN_W - EDGE * 2;
 const CARD_H = 152;
 
-type FilterKey = 'ALL' | 'CARS' | 'GROUP';
-
-const FILTERS: { key: FilterKey; label: string }[] = [
-  { key: 'ALL', label: 'All' },
-  { key: 'CARS', label: 'Cars' },
-  { key: 'GROUP', label: 'Groups' },
-];
-
-function matches(v: VehicleShowcase, f: FilterKey): boolean {
-  if (f === 'ALL') return true;
-  if (f === 'CARS') return v.seats <= 4;
-  return v.seats > 4;
-}
-
 export function VehiclesScreen({ navigation }: VehiclesScreenProps) {
-  const [selected, setSelected] = useState<VehicleShowcase | null>(null);
-  const [filter, setFilter] = useState<FilterKey>('ALL');
+  /** Which class the category row has filtered to. null = all. */
+  const [category, setCategory] = useState<string | null>(null);
 
-  const shown = useMemo(() => VEHICLES.filter((v) => matches(v, filter)), [filter]);
+  // The same cached query the row uses, so the list shows prices without a
+  // second request.
+  const { data: prices } = useClassFromPrices();
+
+  const shown = useMemo(
+    () => (category ? VEHICLES.filter((v) => v.key === category) : VEHICLES),
+    [category],
+  );
 
   return (
     <View style={styles.root}>
@@ -69,33 +61,16 @@ export function VehiclesScreen({ navigation }: VehiclesScreenProps) {
           Tap any vehicle to see it from every angle. Prices depend on your route and timing.
         </Text>
 
-        <View style={styles.filters}>
-          {FILTERS.map((f) => {
-            const active = f.key === filter;
-            return (
-              <Pressable
-                key={f.key}
-                onPress={() => setFilter(f.key)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-              >
-                {active ? (
-                  <View style={[styles.filter, styles.filterActive]}>
-                    <Text style={[styles.filterText, styles.filterTextActive]}>{f.label}</Text>
-                  </View>
-                ) : (
-                  <GlassPanel cornerRadius={radius.pill} style={styles.filter}>
-                    <Text style={styles.filterText}>{f.label}</Text>
-                  </GlassPanel>
-                )}
-              </Pressable>
-            );
-          })}
-        </View>
+        <VehicleCategoryRow selected={category} onSelect={setCategory} />
 
         <View style={styles.list}>
           {shown.map((v) => (
-            <ShowcaseCard key={v.key} vehicle={v} onPress={() => setSelected(v)} />
+            <ShowcaseCard
+              key={v.key}
+              vehicle={v}
+              price={prices?.[v.key]}
+              onPress={() => navigation.navigate('VehicleDetail', { vehicleKey: v.key })}
+            />
           ))}
         </View>
 
@@ -104,25 +79,18 @@ export function VehiclesScreen({ navigation }: VehiclesScreenProps) {
         ) : null}
       </ScrollView>
 
-      <VehicleDetailSheet
-        vehicle={selected}
-        onClose={() => setSelected(null)}
-        onBook={() => {
-          setSelected(null);
-          // Back to Home, where a route can actually be entered. Price and
-          // availability are decided there, against a real trip.
-          navigation.navigate('Home');
-        }}
-      />
     </View>
   );
 }
 
 function ShowcaseCard({
   vehicle,
+  price,
   onPress,
 }: {
   vehicle: VehicleShowcase;
+  /** Cheapest rental package for this class, when the backend has one. */
+  price?: number;
   onPress: () => void;
 }) {
   // The card shows one shot; every angle lives in the detail sheet.
@@ -167,12 +135,18 @@ function ShowcaseCard({
           </Text>
         </View>
 
-        {/* The accent chip. In a rental app this slot holds the price; here
-            there is none to show — a fare needs a route, a time and a trip
-            type, none of which exist yet — so it carries the angle count, which
-            is the thing tapping the card actually gets you. */}
+        {/* The accent chip carries a REAL price when the backend has one —
+            the cheapest rental package for this class. With no package seeded
+            it falls back to what tapping the card gets you, rather than to an
+            invented figure the quote screen would contradict. */}
         <View style={styles.chipAccent}>
-          <Text style={styles.chipAccentText}>{multi ? `${vehicle.angles.length} views` : 'Details'}</Text>
+          <Text style={styles.chipAccentText}>
+            {price !== undefined
+              ? `₹${Math.round(price).toLocaleString('en-IN')}`
+              : multi
+                ? `${vehicle.angles.length} views`
+                : 'Details'}
+          </Text>
         </View>
       </View>
     </Pressable>
@@ -206,18 +180,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
 
-  filters: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.xl,
-    marginBottom: spacing.lg,
-  },
-  filter: { paddingVertical: 7, paddingHorizontal: spacing.lg, borderRadius: radius.pill },
-  filterActive: { backgroundColor: colors.primary },
-  filterText: { ...type.caption, fontSize: 12, color: 'rgba(255,255,255,0.8)', fontWeight: '600' },
-  filterTextActive: { color: colors.primaryText, fontWeight: '700' },
-
-  list: { gap: spacing.lg },
+  list: { gap: spacing.lg, marginTop: spacing.xl },
 
   card: {
     width: CARD_W,

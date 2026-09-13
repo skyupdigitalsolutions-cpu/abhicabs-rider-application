@@ -52,6 +52,16 @@ const ProfileScreen = lazy(() =>
 const VehiclesScreen = lazy(() =>
   import('./src/features/booking/screens/VehiclesScreen').then((m) => ({ default: m.VehiclesScreen })),
 );
+const BookVehicleScreen = lazy(() =>
+  import('./src/features/booking/screens/BookVehicleScreen').then((m) => ({
+    default: m.BookVehicleScreen,
+  })),
+);
+const VehicleDetailScreen = lazy(() =>
+  import('./src/features/booking/screens/VehicleDetailScreen').then((m) => ({
+    default: m.VehicleDetailScreen,
+  })),
+);
 
 import type { AppStackParamList, AuthStackParamList } from './src/navigation/types';
 import { colors } from './src/theme';
@@ -87,7 +97,18 @@ function AuthedNavigator() {
       <AppStack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
       <AppStack.Screen name="PlaceSearch" component={PlaceSearchScreen} options={{ title: 'Search', presentation: 'card' }} />
       <AppStack.Screen name="PickOnMap" component={PickOnMapScreen} options={{ title: 'Pick on map' }} />
-      <AppStack.Screen name="FareOptions" component={FareOptionsScreen} options={{ title: 'Choose ride' }} />
+      {/* No header at all. Two reasons, and the second is the important one:
+          the screen wants a bare back arrow over the map, AND DraggableSheet
+          positions itself against the full window height. With a header the
+          content area is shorter than that, so the sheet hung its own header's
+          worth of pixels below the screen and the last row was unreachable.
+          Home has always had headerShown:false, which is why it never showed
+          the bug. The screen draws its own floating back button. */}
+      <AppStack.Screen
+        name="FareOptions"
+        component={FareOptionsScreen}
+        options={{ headerShown: false }}
+      />
       {/* Transparent header over the dark fleet grid: no white bar, no title —
           just the back arrow floating on the artwork. The screen adds its own
           top padding from useHeaderHeight so nothing hides beneath it. */}
@@ -102,6 +123,24 @@ function AuthedNavigator() {
           headerStyle: { backgroundColor: 'transparent' },
           contentStyle: { backgroundColor: colors.text },
         }}
+      />
+      {/* Light page, so the transparent header carries a dark arrow here. */}
+      <AppStack.Screen
+        name="VehicleDetail"
+        component={VehicleDetailScreen}
+        options={{
+          title: '',
+          headerTransparent: true,
+          headerTintColor: colors.text,
+          headerShadowVisible: false,
+          headerStyle: { backgroundColor: 'transparent' },
+          contentStyle: { backgroundColor: colors.bg },
+        }}
+      />
+      <AppStack.Screen
+        name="BookVehicle"
+        component={BookVehicleScreen}
+        options={{ title: 'Plan your trip' }}
       />
       <AppStack.Screen name="Trip" component={TripScreen} options={{ headerShown: false }} />
       <AppStack.Screen name="Trips" component={TripsScreen} options={{ title: 'Your trips' }} />

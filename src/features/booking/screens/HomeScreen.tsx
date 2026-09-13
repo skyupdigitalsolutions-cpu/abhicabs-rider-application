@@ -16,12 +16,36 @@
  *
  * Searching still works and takes precedence: choosing a place moves the pin
  * to it rather than the other way round.
+ *
+ * ---------------------------------------------------------------------------
+ * THE TAB BAR
+ * ---------------------------------------------------------------------------
+ * A floating glass pill rather than a solid bar welded to the screen edge.
+ *
+ * It sits over a live map, which is the whole reason glass is the right
+ * material here and not just a finish: the map genuinely shows through it, so
+ * the translucency is showing something real rather than faking depth over a
+ * flat colour. Detaching it from the bottom edge is what lets the map be
+ * visible underneath at all.
+ *
+ * One amber pill slides between the three tabs instead of each tab toggling its
+ * own background. The moving object is what makes the control feel continuous —
+ * three independently lighting-up cells read as three switches, not one.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Dimensions, Pressable, StatusBar, StyleSheet, Text, View,
+  ActivityIndicator,
+  Animated,
+  Dimensions,
+  Easing,
+  Pressable,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNearbyCars } from '../nearby.api';
 import { useUserLocation } from '../../../lib/useUserLocation';
 import {
@@ -41,6 +65,13 @@ const { height: SCREEN_H } = Dimensions.get('window');
 
 type Tab = 'RIDE' | 'RENTAL' | 'AIRPORT';
 
+/** Tab order, shared by the bar and the sliding pill so they cannot disagree. */
+const TABS: { key: Tab; icon: string; label: string }[] = [
+  { key: 'RIDE', icon: '🚗', label: 'Ride' },
+  { key: 'RENTAL', icon: '⏱️', label: 'Rental' },
+  { key: 'AIRPORT', icon: '✈️', label: 'Airport' },
+];
+
 /** Approximate height of the Account / Your trips pills, for pin placement. */
 const TOP_PILL_H = 44;
 
@@ -49,6 +80,9 @@ const SHEET_BOTTOM_PAD = 140;
 
 /** Gap between the booking card and the sheet edge, so the dark shows through. */
 const CARD_GUTTER = 12;
+
+/** Inset between the bar's edge and the pill inside it. */
+const BAR_PAD = 6;
 
 /**
  * What the strip above the sheet cycles through.
@@ -100,6 +134,25 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
   const pickup = useBookingDraft((s) => s.pickup);
   const setPickup = useBookingDraft((s) => s.setPickup);
+
+  /* ---- tab bar animation ------------------------------------------- */
+
+  /** Bar width, measured — the pill's travel must match the real layout. */
+  const [barW, setBarW] = useState(0);
+  const tabW = barW > 0 ? (barW - BAR_PAD * 2) / TABS.length : 0;
+  const tabIndex = TABS.findIndex((t) => t.key === tab);
+
+  const pillX = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.spring(pillX, {
+      toValue: BAR_PAD + tabIndex * tabW,
+      useNativeDriver: true,
+      // Low bounce: a navigation control that wobbles reads as unserious.
+      bounciness: 5,
+      speed: 14,
+    }).start();
+  }, [tabIndex, tabW, pillX]);
 
   /**
    * Where the pin sits, in px from the top of the map.
@@ -274,21 +327,89 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         />
       </DraggableSheet>
 
-      <View style={styles.tabBar}>
-        <TabButton icon="🚗" label="Ride" active={tab === 'RIDE'} onPress={() => selectTab('RIDE')} />
-        <TabButton icon="⏱️" label="Rental" active={tab === 'RENTAL'} onPress={() => selectTab('RENTAL')} />
-        <TabButton icon="✈️" label="Airport" active={tab === 'AIRPORT'} onPress={() => selectTab('AIRPORT')} />
+      {/* ---- floating glass tab bar ----------------------------------- */}
+      <View style={styles.tabDock} pointerEvents="box-none">
+        <View style={styles.tabBar} onLayout={(e) => setBarW(e.nativeEvent.layout.width)}>
+          {/* 1 — frosted base. Translucent so the map genuinely reads through. */}
+          <View style={styles.glassBase} pointerEvents="none" />
+
+          {/* 2 — specular sweep across the upper-left, the strongest "this is a
+                 pane" cue and the thing a flat translucent rectangle lacks. */}
+          <LinearGradient
+            pointerEvents="none"
+            colors={['rgba(255,255,255,0.85)', 'rgba(255,255,255,0.35)', 'rgba(255,255,255,0.15)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0.9, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+
+          {/* 3 — lit top rim: glass catches light along its top edge. */}
+          <LinearGradient
+            pointerEvents="none"
+            colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0.3)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.glassRim}
+          />
+
+          {/* 4 — the sliding pill, under the labels so it passes behind them. */}
+          {tabW > 0 ? (
+            <Animated.View
+              pointerEvents="none"
+              style={[styles.tabPill, { width: tabW, transform: [{ translateX: pillX }] }]}
+            />
+          ) : null}
+
+          {TABS.map((t) => (
+            <TabButton
+              key={t.key}
+              icon={t.icon}
+              label={t.label}
+              active={tab === t.key}
+              onPress={() => selectTab(t.key)}
+            />
+          ))}
+        </View>
       </View>
     </View>
   );
 }
 
+/**
+ * One tab.
+ *
+ * The icon scales up slightly when selected and the label fades in weight. Both
+ * are small, and both matter: with a pill sliding underneath, a static icon
+ * looks like the pill is passing over dead furniture rather than picking
+ * something up.
+ */
 function TabButton(props: { icon: string; label: string; active: boolean; onPress: () => void }) {
+  const lift = useRef(new Animated.Value(props.active ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.timing(lift, {
+      toValue: props.active ? 1 : 0,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [props.active, lift]);
+
+  const scale = lift.interpolate({ inputRange: [0, 1], outputRange: [1, 1.14] });
+  const translateY = lift.interpolate({ inputRange: [0, 1], outputRange: [0, -1] });
+
   return (
-    <Pressable style={styles.tabBtn} onPress={props.onPress}>
-      <Text style={[styles.tabIcon, props.active && styles.tabIconActive]}>{props.icon}</Text>
+    <Pressable style={styles.tabBtn} onPress={props.onPress} accessibilityRole="tab">
+      <Animated.Text
+        style={[
+          styles.tabIcon,
+          props.active && styles.tabIconActive,
+          { transform: [{ scale }, { translateY }] },
+        ]}
+      >
+        {props.icon}
+      </Animated.Text>
       <Text style={[styles.tabLabel, props.active && styles.tabLabelActive]}>{props.label}</Text>
-      {props.active ? <View style={styles.tabUnderline} /> : null}
     </Pressable>
   );
 }
@@ -347,18 +468,59 @@ const styles = StyleSheet.create({
   brandStrip: { backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center', marginBottom: spacing.xs },
   brandText: { ...type.display, fontSize: 22, color: colors.primaryText, fontWeight: '800' },
 
-  tabBar: {
-    position: 'absolute', left: 0, right: 0, bottom: 0,
-    flexDirection: 'row', backgroundColor: '#FFFFFF',
-    borderTopWidth: 1, borderTopColor: colors.border,
-    paddingBottom: spacing.lg, paddingTop: spacing.sm,
-    shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: -2 }, elevation: 16,
+  /* ---- tab bar ---------------------------------------------------- */
+
+  /**
+   * The dock is a transparent frame that positions the bar and lets touches
+   * pass through the gap either side of it, so the map is still draggable
+   * beside the pill rather than behind an invisible full-width block.
+   */
+  tabDock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: spacing.lg,
+    // Floats clear of the gesture bar; the gap under it is what lets the map
+    // show through and makes the glass read as glass.
+    paddingBottom: spacing.lg,
     zIndex: 20,
   },
-  tabBtn: { flex: 1, alignItems: 'center', paddingVertical: spacing.xs, gap: 2 },
-  tabIcon: { fontSize: 20, opacity: 0.5 },
+  tabBar: {
+    flexDirection: 'row',
+    borderRadius: radius.pill,
+    padding: BAR_PAD,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.7)',
+    shadowColor: '#000',
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 14,
+  },
+  glassBase: {
+    ...StyleSheet.absoluteFillObject,
+    // Translucent, not solid: the map moving underneath is what sells it. Not
+    // so low that dark map tiles bleed through and wreck the label contrast.
+    backgroundColor: 'rgba(255,255,255,0.82)',
+  },
+  glassRim: { position: 'absolute', top: 0, left: 0, right: 0, height: 1 },
+
+  tabPill: {
+    position: 'absolute',
+    top: BAR_PAD,
+    bottom: BAR_PAD,
+    left: 0,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(255,193,7,0.30)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,193,7,0.55)',
+  },
+
+  tabBtn: { flex: 1, alignItems: 'center', paddingVertical: spacing.sm, gap: 2 },
+  tabIcon: { fontSize: 20, opacity: 0.45 },
   tabIconActive: { opacity: 1 },
   tabLabel: { ...type.caption, color: colors.textMuted },
-  tabLabelActive: { color: colors.primary, fontWeight: '700' },
-  tabUnderline: { width: 20, height: 3, borderRadius: 2, backgroundColor: colors.primary, marginTop: 2 },
+  tabLabelActive: { color: colors.text, fontWeight: '700' },
 });

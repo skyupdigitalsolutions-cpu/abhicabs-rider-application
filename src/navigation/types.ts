@@ -22,6 +22,8 @@ export type AppStackParamList = {
   Trips: undefined;
   Profile: undefined;
   Vehicles: undefined;
+  VehicleDetail: { vehicleKey: string };
+  BookVehicle: { vehicleKey: string };
 };
 
 /** The unauthenticated stack. */
@@ -50,3 +52,5 @@ export type TripScreenProps = NativeStackScreenProps<AppStackParamList, 'Trip'>;
 export type TripsScreenProps = NativeStackScreenProps<AppStackParamList, 'Trips'>;
 export type ProfileScreenProps = NativeStackScreenProps<AppStackParamList, 'Profile'>;
 export type VehiclesScreenProps = NativeStackScreenProps<AppStackParamList, 'Vehicles'>;
+export type VehicleDetailScreenProps = NativeStackScreenProps<AppStackParamList, 'VehicleDetail'>;
+export type BookVehicleScreenProps = NativeStackScreenProps<AppStackParamList, 'BookVehicle'>;
