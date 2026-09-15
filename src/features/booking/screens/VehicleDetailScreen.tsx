@@ -437,7 +437,7 @@ function AboutTab({ vehicle }: { vehicle: (typeof VEHICLES)[number] }) {
         <InfoRow
           Icon={ShieldIcon}
           title="Free cancellation"
-          text="Cancel at no charge up to 30 minutes before your pickup time."
+          text="Cancel at no charge up to an hour before your pickup time."
         />
       </View>
     </View>
